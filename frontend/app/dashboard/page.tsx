@@ -56,7 +56,6 @@ function ScoreBar({ score }: { score: number }) {
 }
 
 export default function DashboardPage() {
-  // ── FIX: isLoaded add kiya — Clerk load hone ka wait karo
   const { user, isLoaded } = useUser();
   const router = useRouter();
 
@@ -66,7 +65,6 @@ export default function DashboardPage() {
   const [refresh,  setRefresh]  = useState(0);
 
   useEffect(() => {
-    // ── FIX: isLoaded check — user available hone ke baad hi call karo
     if (!isLoaded || !user) return;
 
     setAuthHeader(user.id);
@@ -82,7 +80,7 @@ export default function DashboardPage() {
         new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
       ));
     }).finally(() => setLoading(false));
-  }, [isLoaded, user, refresh]); // ── FIX: isLoaded deps mein add kiya
+  }, [isLoaded, user, refresh]);
 
   const totalClients  = clients.length;
   const avgScore      = reports.length
@@ -94,35 +92,90 @@ export default function DashboardPage() {
   );
   const recentReports = reports.slice(0, 5);
 
-  // ── FIX: Clerk load hone tak spinner dikhao
   if (!isLoaded) return (
     <div className="flex items-center justify-center min-h-64">
       <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin" />
     </div>
   );
 
-  return (
-    <div className="p-8 max-w-5xl mx-auto">
+  const formatItc = () => {
+    if (loading) return "—";
+    if (totalItcRisk >= 100000) return `₹${(totalItcRisk / 100000).toFixed(1)}L`;
+    if (totalItcRisk >= 1000) return `₹${(totalItcRisk / 1000).toFixed(0)}K`;
+    return `₹${totalItcRisk}`;
+  };
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
+  return (
+    <div className="px-4 py-5 lg:p-8 max-w-5xl mx-auto">
+
+      {/* ── Header ── */}
+      <div className="flex items-start justify-between mb-5 lg:mb-8">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">
+          <h1 className="text-xl lg:text-2xl font-bold text-gray-900">
             Welcome back, {user?.firstName || "CA"} 👋
           </h1>
-          <p className="text-gray-500 mt-1 text-sm">GST compliance overview for all your clients</p>
+          <p className="text-gray-500 mt-0.5 text-xs lg:text-sm">GST compliance overview</p>
         </div>
         <button
           onClick={() => setRefresh(r => r + 1)}
-          className="flex items-center gap-2 text-gray-400 hover:text-gray-600 text-sm"
+          className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 text-xs mt-1"
         >
-          <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
-          Refresh
+          <RefreshCw size={13} className={loading ? "animate-spin" : ""} />
+          <span className="hidden sm:inline">Refresh</span>
         </button>
       </div>
 
-      {/* Stat cards */}
-      <div className="grid grid-cols-4 gap-4 mb-8">
+      {/* ── Stats: Vertical list on mobile, 4-col grid on desktop ── */}
+
+      {/* MOBILE — vertical list inside one card */}
+      <div className="lg:hidden bg-white border border-gray-200 rounded-xl mb-5 divide-y divide-gray-100">
+        <div className="flex items-center justify-between px-4 py-3.5">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-blue-50 rounded-lg flex items-center justify-center">
+              <Users size={15} className="text-blue-600" />
+            </div>
+            <span className="text-sm text-gray-700 font-medium">Total Clients</span>
+          </div>
+          <span className="text-lg font-bold text-gray-900">{loading ? "—" : totalClients}</span>
+        </div>
+
+        <div className="flex items-center justify-between px-4 py-3.5">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-green-50 rounded-lg flex items-center justify-center">
+              <TrendingUp size={15} className="text-green-600" />
+            </div>
+            <span className="text-sm text-gray-700 font-medium">Avg Score</span>
+          </div>
+          <span className={`text-lg font-bold ${avgScore ? scoreColor(avgScore) : "text-gray-400"}`}>
+            {loading ? "—" : avgScore ?? "N/A"}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between px-4 py-3.5">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-red-50 rounded-lg flex items-center justify-center">
+              <AlertTriangle size={15} className="text-red-500" />
+            </div>
+            <span className="text-sm text-gray-700 font-medium">High Risk</span>
+          </div>
+          <span className={`text-lg font-bold ${highRiskCount > 0 ? "text-red-600" : "text-green-600"}`}>
+            {loading ? "—" : highRiskCount}
+          </span>
+        </div>
+
+        <div className="flex items-center justify-between px-4 py-3.5">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-orange-50 rounded-lg flex items-center justify-center">
+              <span className="text-orange-600 font-bold text-xs">₹</span>
+            </div>
+            <span className="text-sm text-gray-700 font-medium">ITC at Risk</span>
+          </div>
+          <span className="text-lg font-bold text-orange-600">{formatItc()}</span>
+        </div>
+      </div>
+
+      {/* DESKTOP — 4-col grid (same as original) */}
+      <div className="hidden lg:grid grid-cols-4 gap-4 mb-8">
         <div className="bg-white border border-gray-200 rounded-2xl p-5">
           <div className="flex items-center justify-between mb-3">
             <p className="text-sm text-gray-500">Total Clients</p>
@@ -173,122 +226,114 @@ export default function DashboardPage() {
               <span className="text-orange-600 font-bold text-xs">₹</span>
             </div>
           </div>
-          <p className="text-3xl font-bold text-orange-600">
-            {loading ? "—" : totalItcRisk >= 100000
-              ? `₹${(totalItcRisk / 100000).toFixed(1)}L`
-              : totalItcRisk >= 1000
-              ? `₹${(totalItcRisk / 1000).toFixed(0)}K`
-              : `₹${totalItcRisk}`}
-          </p>
+          <p className="text-3xl font-bold text-orange-600">{formatItc()}</p>
           <p className="text-xs text-gray-400 mt-2">Across all clients</p>
         </div>
       </div>
 
-      {/* CTA banner */}
-      <div className="bg-blue-600 rounded-2xl p-5 mb-8 flex items-center justify-between">
-        <div>
-          <p className="font-bold text-white">Run a New Audit</p>
-          <p className="text-blue-200 text-sm mt-0.5">Upload an Excel file — get results in 2 minutes</p>
+      {/* ── CTA Banner ── */}
+      <div className="bg-blue-600 rounded-xl lg:rounded-2xl p-4 lg:p-5 mb-5 lg:mb-8 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-bold text-white text-sm lg:text-base">Run a New Audit</p>
+          <p className="text-blue-200 text-xs mt-0.5">Upload Excel — results in 2 min</p>
         </div>
         <button
           onClick={() => router.push("/upload")}
-          className="flex items-center gap-2 bg-white text-blue-600 font-semibold px-5 py-2.5 rounded-xl text-sm hover:bg-blue-50"
+          className="flex items-center gap-1.5 bg-white text-blue-600 font-semibold px-4 py-2.5 rounded-xl text-xs lg:text-sm hover:bg-blue-50 shrink-0 active:scale-95 transition-transform"
         >
-          <Upload size={16} /> Upload Excel
+          <Upload size={14} /> Upload
         </button>
       </div>
 
-      <div className="grid grid-cols-5 gap-6">
+      {/* ── Recent Audits + Clients — stacked on mobile, side-by-side desktop ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 lg:gap-6">
 
         {/* Recent audits */}
-        <div className="col-span-3 bg-white border border-gray-200 rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-gray-900">Recent Audits</h2>
-            <Link href="/reports" className="text-xs text-blue-600 hover:underline">View all →</Link>
+        <div className="lg:col-span-3 bg-white border border-gray-200 rounded-xl lg:rounded-2xl p-4 lg:p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-bold text-sm lg:text-base text-gray-900">Recent Audits</h2>
+            <Link href="/reports" className="text-[10px] lg:text-xs text-blue-600 hover:underline">View all →</Link>
           </div>
 
           {loading ? (
-            <div className="space-y-3">
-              {[1,2,3].map(i => <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />)}
+            <div className="space-y-2">
+              {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />)}
             </div>
           ) : recentReports.length === 0 ? (
-            <div className="text-center py-10">
-              <p className="text-gray-400 text-sm">No audits yet</p>
-              <button onClick={() => router.push("/upload")} className="text-blue-600 text-sm mt-2 hover:underline">
+            <div className="text-center py-8">
+              <p className="text-gray-400 text-xs">No audits yet</p>
+              <button onClick={() => router.push("/upload")} className="text-blue-600 text-xs mt-2 hover:underline">
                 Run your first audit →
               </button>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {recentReports.map((r) => (
                 <div
                   key={r.id}
                   onClick={() => router.push(`/reports/${r.id}`)}
-                  className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer transition-colors"
+                  className="flex items-center gap-2.5 p-2.5 rounded-xl hover:bg-gray-50 cursor-pointer active:bg-gray-100 transition-colors"
                 >
-                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-bold text-sm ${scoreBg(r.compliance_score)} ${scoreColor(r.compliance_score)}`}>
+                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center font-bold text-xs ${scoreBg(r.compliance_score)} ${scoreColor(r.compliance_score)}`}>
                     {r.compliance_score}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">
+                    <p className="text-xs font-medium text-gray-900 truncate">
                       {r.client_name || "Audit"} · {r.period || "—"}
                     </p>
                     <ScoreBar score={r.compliance_score} />
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${riskBadge(r.compliance_score)}`}>
-                      {riskLabel(r.compliance_score)}
-                    </span>
-                    <ArrowRight size={14} className="text-gray-300" />
-                  </div>
+                  <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${riskBadge(r.compliance_score)}`}>
+                    {riskLabel(r.compliance_score)}
+                  </span>
                 </div>
               ))}
             </div>
           )}
         </div>
 
-        {/* Clients quick view */}
-        <div className="col-span-2 bg-white border border-gray-200 rounded-2xl p-5">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-bold text-gray-900">Clients</h2>
-            <Link href="/clients" className="text-xs text-blue-600 hover:underline">View all →</Link>
+        {/* Clients */}
+        <div className="lg:col-span-2 bg-white border border-gray-200 rounded-xl lg:rounded-2xl p-4 lg:p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-bold text-sm lg:text-base text-gray-900">Clients</h2>
+            <Link href="/clients" className="text-[10px] lg:text-xs text-blue-600 hover:underline">View all →</Link>
           </div>
 
           {loading ? (
-            <div className="space-y-3">
-              {[1,2,3].map(i => <div key={i} className="h-12 bg-gray-100 rounded-xl animate-pulse" />)}
+            <div className="space-y-2">
+              {[1,2,3].map(i => <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />)}
             </div>
           ) : clients.length === 0 ? (
-            <div className="text-center py-10">
-              <p className="text-gray-400 text-sm">No clients added yet</p>
-              <Link href="/clients" className="text-blue-600 text-sm mt-2 inline-block hover:underline">
+            <div className="text-center py-8">
+              <p className="text-gray-400 text-xs">No clients added yet</p>
+              <Link href="/clients" className="text-blue-600 text-xs mt-2 inline-block hover:underline">
                 Add your first client →
               </Link>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               {clients.slice(0, 5).map((c) => {
                 const initials = c.business_name
                   .split(" ").slice(0, 2).map(w => w[0]).join("").toUpperCase();
                 return (
                   <div
                     key={c.id}
-                    className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-gray-50 cursor-pointer transition-colors"
+                    className="flex items-center gap-2.5 p-2 rounded-xl hover:bg-gray-50 cursor-pointer active:bg-gray-100 transition-colors"
                     onClick={() => router.push(`/upload?client_id=${c.id}`)}
                   >
-                    <div className="w-8 h-8 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-xs font-bold shrink-0">
+                    <div className="w-7 h-7 bg-blue-100 text-blue-700 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0">
                       {initials}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-gray-900 truncate">{c.business_name}</p>
+                      <p className="text-xs font-medium text-gray-900 truncate">{c.business_name}</p>
                       {c.sector && (
-                        <p className="text-xs text-gray-400 truncate capitalize">{c.sector.replace("_", " ")}</p>
+                        <p className="text-[10px] text-gray-400 truncate capitalize">{c.sector.replace("_", " ")}</p>
                       )}
                     </div>
                     {c.last_score != null ? (
-                      <span className={`text-xs font-bold ${scoreColor(c.last_score)}`}>{c.last_score}</span>
+                      <span className={`text-[10px] font-bold ${scoreColor(c.last_score)}`}>{c.last_score}</span>
                     ) : (
-                      <span className="text-xs text-gray-300">No audit</span>
+                      <span className="text-[10px] text-gray-300">—</span>
                     )}
                   </div>
                 );
@@ -298,12 +343,11 @@ export default function DashboardPage() {
 
           <button
             onClick={() => router.push("/upload")}
-            className="w-full mt-4 py-2.5 border-2 border-dashed border-gray-200 rounded-xl text-xs text-gray-400 hover:border-blue-300 hover:text-blue-500 transition-colors"
+            className="w-full mt-3 py-2 border-2 border-dashed border-gray-200 rounded-xl text-[10px] text-gray-400 hover:border-blue-300 hover:text-blue-500 active:scale-[0.98] transition-all"
           >
             + Run new audit
           </button>
         </div>
-
       </div>
     </div>
   );
