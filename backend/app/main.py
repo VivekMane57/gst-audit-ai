@@ -1,22 +1,25 @@
 """
-main.py
--------
-FastAPI application entry point.
-Yahan sirf app setup hota hai — logic routers mein hoti hai.
-
-Run karo:
-  uvicorn app.main:app --reload --port 8000
+main.py — FastAPI entry point
+Run: uvicorn app.main:app --reload --port 8000
 """
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
-import sentry_sdk
 import logging
 import time
 
 from app.config import get_settings
 from app.routers import health
+from app.routers import audit   as audit_router
+from app.routers import clients as clients_router
+from app.routers import reports as reports_router
+
+try:
+    import sentry_sdk
+    _sentry_available = True
+except ImportError:
+    _sentry_available = False
 
 logging.basicConfig(
     level=logging.INFO,
@@ -27,81 +30,66 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # ── Startup ───────────────────────────────────────────────
     settings = get_settings()
-
-    if settings.sentry_dsn:
-        sentry_sdk.init(
-            dsn=settings.sentry_dsn,
-            traces_sample_rate=0.1,
-            environment="production" if not settings.debug else "development",
-        )
-        logger.info("Sentry initialized")
-
-    logger.info(
-        f"Starting {settings.app_name} v{settings.app_version} "
-        f"| debug={settings.debug}"
-    )
+    if _sentry_available and getattr(settings, "sentry_dsn", None):
+        sentry_sdk.init(dsn=settings.sentry_dsn, traces_sample_rate=0.1)
+    logger.info(f"Starting GST Audit AI v1.0.0 | debug={settings.debug}")
+    from fastapi.routing import APIRoute
+    for route in app.routes:
+        if isinstance(route, APIRoute):
+            logger.info(f"  Route: {list(route.methods)} {route.path}")
     yield
-
-    # ── Shutdown ──────────────────────────────────────────────
-    logger.info("Application shutting down")
+    logger.info("Shutting down GST Audit AI")
 
 
 settings = get_settings()
 
 app = FastAPI(
-    title=settings.app_name,
-    version=settings.app_version,
-    description="AI-powered GST Audit Engine for Indian CAs",
-    lifespan=lifespan,
-    # Docs sirf debug mode mein
-    docs_url="/docs"   if settings.debug else None,
-    redoc_url="/redoc" if settings.debug else None,
-    openapi_url="/openapi.json" if settings.debug else None,
+    title       = "GST Audit AI",
+    version     = "1.0.0",
+    description = "AI-powered GST Audit Engine for Indian CAs",
+    lifespan    = lifespan,
+    docs_url    = "/docs",
+    redoc_url   = "/redoc",
+    openapi_url = "/openapi.json",
 )
 
-# ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.allowed_origins,
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_origins     = settings.allowed_origins,
+    allow_credentials = True,
+    allow_methods     = ["GET", "POST", "PUT", "DELETE"],
+    allow_headers     = ["Authorization", "Content-Type", "X-Clerk-Id", "x-clerk-id"],
 )
 
 
-# ── Request timing middleware ─────────────────────────────────────────────────
 @app.middleware("http")
 async def add_process_time(request: Request, call_next):
-    start = time.perf_counter()
+    start    = time.perf_counter()
     response = await call_next(request)
-    duration = round((time.perf_counter() - start) * 1000, 2)
-    response.headers["X-Process-Time-Ms"] = str(duration)
-    logger.info(
-        f"{request.method} {request.url.path} "
-        f"→ {response.status_code} [{duration}ms]"
-    )
+    ms       = round((time.perf_counter() - start) * 1000, 2)
+    response.headers["X-Process-Time-Ms"] = str(ms)
+    logger.info(f"{request.method} {request.url.path} → {response.status_code} [{ms}ms]")
     return response
 
 
-# ── Global exception handler ──────────────────────────────────────────────────
 @app.exception_handler(Exception)
 async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled error on {request.url.path}: {exc}", exc_info=True)
     return JSONResponse(
         status_code=500,
-        content={
-            "error": "Kuch problem aa gayi. Please 2 minute baad try karo.",
-            "support": "support@gstauditai.com",
-        },
+        content={"error": "Something went wrong. Please retry."},
     )
 
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-app.include_router(health.router, tags=["Health"])
-
-# Day 2 mein add honge:
-# app.include_router(audit.router,   prefix="/audit",   tags=["Audit"])
-# app.include_router(clients.router, prefix="/clients", tags=["Clients"])
-# app.include_router(reports.router, prefix="/reports", tags=["Reports"])
+# Your routers already have full paths inside them:
+#   audit.py   → @router.post("/audit"),    @router.get("/audit/{id}")
+#   clients.py → @router.get("/clients"),   @router.post("/clients") etc.
+#   reports.py → @router.get("/reports"),   @router.get("/reports/{id}/pdf")
+#
+# So prefix="" here — routers own their full paths.
+app.include_router(health.router,                         tags=["Health"])
+app.include_router(audit_router.router,   prefix="",      tags=["Audit"])
+app.include_router(clients_router.router, prefix="",      tags=["Clients"])
+app.include_router(reports_router.router, prefix="",      tags=["Reports"])

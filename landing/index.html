@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AuditAI — Smart GST Compliance for Indian CAs</title>
+<meta name="description" content="India's first AI-powered GST audit tool with Notice Prediction. Detect mismatches, predict notices, generate reports in Hindi/Marathi. Rs.999/month.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#06080f;--bg2:#0c1020;--surface:#111828;--surface2:#1a2240;
+  --border:#1e2a4a;--text:#e2e8f0;--muted:#7b8baa;
+  --blue:#3b82f6;--blue-glow:#3b82f640;--cyan:#06d6a0;--cyan-glow:#06d6a040;
+  --red:#ef4444;--amber:#f59e0b;--green:#22c55e;
+  --grad:linear-gradient(135deg,#3b82f6,#06d6a0);
+}
+html{scroll-behavior:smooth}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;line-height:1.6}
+a{color:inherit;text-decoration:none}
+
+/* Grain overlay */
+body::before{content:'';position:fixed;inset:0;z-index:9999;pointer-events:none;opacity:.03;
+  background:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+/* Utility */
+.container{max-width:1140px;margin:0 auto;padding:0 24px}
+.mono{font-family:'JetBrains Mono',monospace}
+.grad-text{background:var(--grad);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:14px 32px;border-radius:12px;font-weight:700;font-size:15px;cursor:pointer;border:none;transition:all .3s}
+.btn-primary{background:var(--grad);color:#fff;box-shadow:0 4px 30px var(--blue-glow)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 8px 40px var(--blue-glow)}
+.btn-outline{background:transparent;color:var(--text);border:1.5px solid var(--border)}
+.btn-outline:hover{border-color:var(--blue);color:var(--blue)}
+.badge{display:inline-flex;padding:6px 14px;border-radius:20px;font-size:12px;font-weight:600;letter-spacing:.5px}
+
+/* Animations */
+@keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+@keyframes pulse-glow{0%,100%{opacity:.4}50%{opacity:.8}}
+@keyframes slide-in{from{opacity:0;transform:translateX(-20px)}to{opacity:1;transform:translateX(0)}}
+@keyframes count-up{from{opacity:0;transform:scale(.8)}to{opacity:1;transform:scale(1)}}
+.fade-up{animation:fadeUp .8s ease both}
+.fade-up-d1{animation-delay:.1s}.fade-up-d2{animation-delay:.2s}.fade-up-d3{animation-delay:.3s}
+.fade-up-d4{animation-delay:.4s}.fade-up-d5{animation-delay:.5s}.fade-up-d6{animation-delay:.6s}
+
+/* ══════ NAVBAR ══════ */
+nav{position:fixed;top:0;width:100%;z-index:100;padding:16px 0;backdrop-filter:blur(20px);background:rgba(6,8,15,.8);border-bottom:1px solid rgba(30,42,74,.5);transition:all .3s}
+nav .inner{display:flex;align-items:center;justify-content:space-between}
+nav .logo{display:flex;align-items:center;gap:10px;font-weight:800;font-size:20px}
+nav .logo img{width:36px;height:36px;border-radius:8px}
+nav .links{display:flex;gap:32px;align-items:center}
+nav .links a{font-size:14px;font-weight:500;color:var(--muted);transition:color .2s}
+nav .links a:hover{color:var(--text)}
+nav .cta{padding:10px 24px;font-size:13px;border-radius:10px}
+
+/* ══════ HERO ══════ */
+.hero{padding:160px 0 100px;position:relative;text-align:center;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-200px;left:50%;transform:translateX(-50%);width:800px;height:800px;background:radial-gradient(circle,var(--blue-glow) 0%,transparent 70%);pointer-events:none;animation:pulse-glow 4s ease-in-out infinite}
+.hero .overline{letter-spacing:3px;font-size:12px;font-weight:700;color:var(--cyan);text-transform:uppercase;margin-bottom:20px}
+.hero h1{font-size:clamp(36px,5.5vw,64px);font-weight:800;line-height:1.1;margin-bottom:24px;max-width:800px;margin-left:auto;margin-right:auto}
+.hero .sub{font-size:18px;color:var(--muted);max-width:600px;margin:0 auto 40px;line-height:1.7}
+.hero .buttons{display:flex;gap:16px;justify-content:center;flex-wrap:wrap}
+.hero .stats-row{display:flex;gap:48px;justify-content:center;margin-top:60px;flex-wrap:wrap}
+.hero .stat{text-align:center}
+.hero .stat-num{font-size:36px;font-weight:800;animation:count-up .8s ease both}
+.hero .stat-label{font-size:13px;color:var(--muted);margin-top:4px}
+
+/* ══════ NOTICE PREVIEW (floating card) ══════ */
+.notice-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:32px;max-width:480px;margin:60px auto 0;position:relative;animation:float 5s ease-in-out infinite;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+.notice-card .prob{font-size:48px;font-weight:800;color:var(--red)}
+.notice-card .prob-label{font-size:13px;color:var(--muted);margin-bottom:16px}
+.notice-card .bar-bg{height:8px;background:var(--surface2);border-radius:4px;overflow:hidden;margin-bottom:20px}
+.notice-card .bar-fill{height:100%;border-radius:4px;background:linear-gradient(90deg,var(--amber),var(--red));width:0;animation:bar-grow 2s ease .5s both}
+@keyframes bar-grow{to{width:95%}}
+.notice-card .risk-item{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);font-size:14px}
+.notice-card .risk-item:last-child{border:none}
+.notice-card .risk-dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-right:8px}
+
+/* ══════ FEATURES ══════ */
+.features{padding:120px 0;position:relative}
+.section-label{text-align:center;margin-bottom:60px}
+.section-label .overline{letter-spacing:3px;font-size:12px;font-weight:700;color:var(--cyan);text-transform:uppercase;margin-bottom:12px}
+.section-label h2{font-size:clamp(28px,4vw,44px);font-weight:800}
+.section-label p{color:var(--muted);max-width:500px;margin:12px auto 0;font-size:16px}
+.feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(320px,1fr));gap:24px}
+.feature-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px;transition:all .3s;position:relative;overflow:hidden}
+.feature-card:hover{border-color:var(--blue);transform:translateY(-4px);box-shadow:0 12px 40px rgba(59,130,246,.1)}
+.feature-card .icon{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:16px}
+.feature-card h3{font-size:18px;font-weight:700;margin-bottom:8px}
+.feature-card p{font-size:14px;color:var(--muted);line-height:1.7}
+.feature-card .tag{position:absolute;top:16px;right:16px;font-size:10px;font-weight:700;padding:4px 10px;border-radius:6px;letter-spacing:.5px}
+
+/* ══════ HOW IT WORKS ══════ */
+.how{padding:120px 0;background:var(--bg2)}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:32px;margin-top:40px}
+.step{text-align:center;padding:40px 24px}
+.step .num{width:56px;height:56px;border-radius:50%;background:var(--grad);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:800;color:#fff;margin:0 auto 20px;box-shadow:0 4px 20px var(--blue-glow)}
+.step h3{font-size:18px;font-weight:700;margin-bottom:8px}
+.step p{font-size:14px;color:var(--muted)}
+
+/* ══════ PRICING ══════ */
+.pricing{padding:120px 0}
+.price-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;max-width:960px;margin:40px auto 0}
+.price-card{background:var(--surface);border:1px solid var(--border);border-radius:20px;padding:36px;text-align:center;transition:all .3s;position:relative}
+.price-card.popular{border-color:var(--blue);box-shadow:0 0 40px var(--blue-glow)}
+.price-card.popular::before{content:'MOST POPULAR';position:absolute;top:-12px;left:50%;transform:translateX(-50%);background:var(--grad);color:#fff;font-size:11px;font-weight:700;padding:4px 16px;border-radius:20px;letter-spacing:1px}
+.price-card .plan{font-size:14px;font-weight:600;color:var(--muted);margin-bottom:8px}
+.price-card .amount{font-size:42px;font-weight:800;margin-bottom:4px}
+.price-card .period{font-size:13px;color:var(--muted);margin-bottom:24px}
+.price-card .features-list{text-align:left;margin-bottom:28px}
+.price-card .features-list li{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:14px;color:var(--muted)}
+.price-card .features-list li::before{content:'✓';color:var(--cyan);font-weight:700;font-size:14px}
+.price-card .btn{width:100%;justify-content:center}
+
+/* ══════ LANGUAGES ══════ */
+.languages{padding:100px 0;background:var(--bg2);text-align:center}
+.lang-cards{display:flex;gap:24px;justify-content:center;margin-top:40px;flex-wrap:wrap}
+.lang-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:32px 40px;text-align:center;min-width:200px;transition:all .3s}
+.lang-card:hover{border-color:var(--cyan);transform:translateY(-4px)}
+.lang-card .flag{font-size:36px;margin-bottom:12px}
+.lang-card h3{font-size:16px;font-weight:700;margin-bottom:4px}
+.lang-card p{font-size:13px;color:var(--muted)}
+.lang-sample{margin-top:8px;font-size:12px;color:var(--cyan);background:var(--surface2);padding:8px 12px;border-radius:8px;display:inline-block}
+
+/* ══════ TESTIMONIAL ══════ */
+.trust{padding:100px 0}
+.trust-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:24px;margin-top:40px}
+.trust-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px}
+.trust-card .quote{font-size:15px;color:var(--muted);line-height:1.7;margin-bottom:16px;font-style:italic}
+.trust-card .author{font-size:13px;font-weight:600}
+.trust-card .role{font-size:12px;color:var(--muted)}
+
+/* ══════ CTA ══════ */
+.cta-section{padding:100px 0;text-align:center;position:relative}
+.cta-section::before{content:'';position:absolute;bottom:0;left:50%;transform:translateX(-50%);width:600px;height:400px;background:radial-gradient(circle,var(--cyan-glow) 0%,transparent 70%);pointer-events:none}
+.cta-section h2{font-size:clamp(28px,4vw,44px);font-weight:800;margin-bottom:16px}
+.cta-section p{color:var(--muted);max-width:500px;margin:0 auto 32px;font-size:16px}
+
+/* ══════ FOOTER ══════ */
+footer{padding:40px 0;border-top:1px solid var(--border);text-align:center;font-size:13px;color:var(--muted)}
+
+/* ══════ RESPONSIVE ══════ */
+@media(max-width:768px){
+  nav .links{display:none}
+  .steps,.price-grid,.trust-grid{grid-template-columns:1fr}
+  .hero .stats-row{gap:24px}
+  .feature-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<!-- ══════ NAVBAR ══════ -->
+<nav>
+  <div class="container inner">
+    <a href="#" class="logo">
+      <img src="https://img.icons8.com/fluency/48/shield-with-a-checkmark.png" alt="AuditAI">
+      <span>Audit<span class="grad-text">AI</span></span>
+    </a>
+    <div class="links">
+      <a href="#features">Features</a>
+      <a href="#how">How it Works</a>
+      <a href="#pricing">Pricing</a>
+      <a href="#languages">Languages</a>
+      <a href="https://app.auditai.in/login" class="btn btn-primary cta">Start Free →</a>
+    </div>
+  </div>
+</nav>
+
+<!-- ══════ HERO ══════ -->
+<section class="hero">
+  <div class="container">
+    <div class="overline fade-up">India's First GST Notice Predictor</div>
+    <h1 class="fade-up fade-up-d1">
+      Stop GST Notices <span class="grad-text">Before They Arrive</span>
+    </h1>
+    <p class="sub fade-up fade-up-d2">
+      Upload Excel → AI runs 10 audit checks in 2 minutes → 
+      Predicts notice probability → Fix-it reports in Hindi, English & Marathi
+    </p>
+    <div class="buttons fade-up fade-up-d3">
+      <a href="https://app.auditai.in/signup" class="btn btn-primary">Start Free Audit →</a>
+      <a href="#how" class="btn btn-outline">See How it Works</a>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-row fade-up fade-up-d4">
+      <div class="stat">
+        <div class="stat-num grad-text">10+</div>
+        <div class="stat-label">Audit Checks</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num grad-text">2 min</div>
+        <div class="stat-label">Per Audit</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num grad-text">3</div>
+        <div class="stat-label">Languages</div>
+      </div>
+      <div class="stat">
+        <div class="stat-num grad-text">95%</div>
+        <div class="stat-label">Detection Rate</div>
+      </div>
+    </div>
+
+    <!-- Floating Notice Card -->
+    <div class="notice-card fade-up fade-up-d5">
+      <div style="display:flex;justify-content:space-between;align-items:flex-start">
+        <div>
+          <div class="prob-label">GST Notice Probability</div>
+          <div class="prob">95%</div>
+        </div>
+        <span class="badge" style="background:#ef444420;color:var(--red)">VERY HIGH RISK</span>
+      </div>
+      <div class="bar-bg"><div class="bar-fill"></div></div>
+      <div class="risk-item">
+        <span><span class="risk-dot" style="background:var(--red)"></span> Tax Computation Error</span>
+        <span class="mono" style="color:var(--red)">54%</span>
+      </div>
+      <div class="risk-item">
+        <span><span class="risk-dot" style="background:var(--amber)"></span> Fraud Detection</span>
+        <span class="mono" style="color:var(--amber)">15%</span>
+      </div>
+      <div class="risk-item">
+        <span><span class="risk-dot" style="background:var(--blue)"></span> Filing Non-Compliance</span>
+        <span class="mono" style="color:var(--blue)">10%</span>
+      </div>
+      <div style="margin-top:16px;padding:12px;background:var(--surface2);border-radius:10px;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-size:13px;color:var(--muted)">If you fix all → </span>
+        <span style="font-size:13px"><span style="color:var(--red);text-decoration:line-through">95%</span> <span style="font-weight:700;color:var(--green)">→ 28%</span></span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════ FEATURES ══════ -->
+<section class="features" id="features">
+  <div class="container">
+    <div class="section-label">
+      <div class="overline fade-up">Powerful Features</div>
+      <h2 class="fade-up fade-up-d1">Everything a CA Needs, <span class="grad-text">In One Tool</span></h2>
+      <p class="fade-up fade-up-d2">Built by someone who understands GST data — tested on real client files</p>
+    </div>
+    <div class="feature-grid">
+      <div class="feature-card fade-up">
+        <div class="tag" style="background:#ef444420;color:var(--red)">UNIQUE</div>
+        <div class="icon" style="background:#ef444420">🔮</div>
+        <h3>GST Notice Predictor</h3>
+        <p>AI predicts the probability of receiving a GST notice (ASMT-10, DRC-01, ADT-01). Shows exact risk areas and "what-if" analysis — fix issues and see probability drop.</p>
+      </div>
+      <div class="feature-card fade-up fade-up-d1">
+        <div class="icon" style="background:#3b82f620">🔍</div>
+        <h3>10+ Smart Audit Checks</h3>
+        <p>Tax type mismatch (IGST vs CGST+SGST), missing invoices in GSTR-1, GSTR-2B gaps, amount mismatches, duplicates, invalid GSTIN — all detected automatically.</p>
+      </div>
+      <div class="feature-card fade-up fade-up-d2">
+        <div class="icon" style="background:#06d6a020">📊</div>
+        <h3>Risk Score Dashboard</h3>
+        <p>Every client gets a compliance score (0-100) with severity breakdown (Critical/High/Medium/Low). Track all clients from one dashboard.</p>
+      </div>
+      <div class="feature-card fade-up fade-up-d3">
+        <div class="tag" style="background:#06d6a020;color:var(--cyan)">UNIQUE</div>
+        <div class="icon" style="background:#f59e0b20">🌐</div>
+        <h3>Hindi & Marathi Reports</h3>
+        <p>Generate audit reports in English, Hindi, or Marathi. Issue descriptions, fix steps, legal references — all in your preferred language.</p>
+      </div>
+      <div class="feature-card fade-up fade-up-d4">
+        <div class="icon" style="background:#8b5cf620">📋</div>
+        <h3>Professional PDF Reports</h3>
+        <p>Download audit reports with compliance score, ITC at risk, legal references (Section 16, 25, 37, 47), penalty calculations, and step-by-step fix instructions.</p>
+      </div>
+      <div class="feature-card fade-up fade-up-d5">
+        <div class="icon" style="background:#ec489920">🏢</div>
+        <h3>8 Business Sectors</h3>
+        <p>Sector-specific checks for Healthcare, Manufacturing, Retail, IT Services, Real Estate, Restaurant, Export/Import. Each sector has unique GST rules.</p>
+      </div>
+      <div class="feature-card fade-up fade-up-d6">
+        <div class="icon" style="background:#3b82f620">📂</div>
+        <h3>Any Excel Format</h3>
+        <p>Smart column mapper with 200+ aliases. Works with Tally, Busy, Zoho, Marg ERP, SAP, GSTN portal downloads — auto-detects your software.</p>
+      </div>
+      <div class="feature-card fade-up">
+        <div class="icon" style="background:#06d6a020">🔒</div>
+        <h3>Bank-Grade Security</h3>
+        <p>AES-256 encryption for all GSTIN data. Row-level security in Supabase. Asia Pacific (Singapore) data storage. Your clients' data is safe.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════ HOW IT WORKS ══════ -->
+<section class="how" id="how">
+  <div class="container">
+    <div class="section-label">
+      <div class="overline">Simple Process</div>
+      <h2>Audit Done in <span class="grad-text">3 Easy Steps</span></h2>
+    </div>
+    <div class="steps">
+      <div class="step fade-up">
+        <div class="num">1</div>
+        <h3>Upload Excel Files</h3>
+        <p>Upload your client's Sales Register + Purchase Register. Works with any accounting software export — Tally, Busy, Zoho, or manual Excel.</p>
+      </div>
+      <div class="step fade-up fade-up-d2">
+        <div class="num">2</div>
+        <h3>AI Runs 10+ Checks</h3>
+        <p>In under 2 minutes, our engine checks tax type, GSTIN validity, missing invoices, amount mismatches, duplicates, and sector-specific rules.</p>
+      </div>
+      <div class="step fade-up fade-up-d4">
+        <div class="num">3</div>
+        <h3>Get Report + Prediction</h3>
+        <p>Download a professional PDF with compliance score, notice probability, fix steps, and legal references — in English, Hindi, or Marathi.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════ PRICING ══════ -->
+<section class="pricing" id="pricing">
+  <div class="container">
+    <div class="section-label">
+      <div class="overline">Simple Pricing</div>
+      <h2>Plans That <span class="grad-text">Fit Your Practice</span></h2>
+      <p>Start free. Upgrade when you need more.</p>
+    </div>
+    <div class="price-grid">
+      <!-- Free -->
+      <div class="price-card fade-up">
+        <div class="plan">FREE</div>
+        <div class="amount">₹0</div>
+        <div class="period">forever</div>
+        <ul class="features-list">
+          <li>3 audits per month</li>
+          <li>All 10+ audit checks</li>
+          <li>Notice probability</li>
+          <li>PDF report download</li>
+          <li>1 language (English)</li>
+        </ul>
+        <a href="https://app.auditai.in/signup" class="btn btn-outline" style="width:100%;justify-content:center">Get Started</a>
+      </div>
+      <!-- Pro -->
+      <div class="price-card popular fade-up fade-up-d2">
+        <div class="plan">PRO</div>
+        <div class="amount grad-text">₹999</div>
+        <div class="period">per month</div>
+        <ul class="features-list">
+          <li>Unlimited audits</li>
+          <li>All 10+ audit checks</li>
+          <li>Notice predictor + What-if</li>
+          <li>Hindi + Marathi reports</li>
+          <li>Notice reply generator</li>
+          <li>Client management</li>
+          <li>Priority support</li>
+        </ul>
+        <a href="https://app.auditai.in/signup" class="btn btn-primary" style="width:100%;justify-content:center">Start Pro →</a>
+      </div>
+      <!-- Firm -->
+      <div class="price-card fade-up fade-up-d4">
+        <div class="plan">FIRM</div>
+        <div class="amount">₹2,499</div>
+        <div class="period">per month</div>
+        <ul class="features-list">
+          <li>Everything in Pro</li>
+          <li>5 team members</li>
+          <li>Bulk audit (50+ clients)</li>
+          <li>Supplier trust scores</li>
+          <li>Custom branding on PDF</li>
+          <li>API access</li>
+          <li>Dedicated support</li>
+        </ul>
+        <a href="https://app.auditai.in/signup" class="btn btn-outline" style="width:100%;justify-content:center">Contact Sales</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════ LANGUAGES ══════ -->
+<section class="languages" id="languages">
+  <div class="container">
+    <div class="section-label">
+      <div class="overline">Multi-Language</div>
+      <h2>Reports in <span class="grad-text">Your Language</span></h2>
+      <p>First GST audit tool with Marathi & Hindi support</p>
+    </div>
+    <div class="lang-cards">
+      <div class="lang-card fade-up">
+        <div class="flag">🇬🇧</div>
+        <h3>English</h3>
+        <p>Full audit reports</p>
+        <div class="lang-sample">Invoice SAL-002: Inter-state supply but CGST+SGST charged</div>
+      </div>
+      <div class="lang-card fade-up fade-up-d2">
+        <div class="flag">🇮🇳</div>
+        <h3>Hindi</h3>
+        <p>हिंदी में ऑडिट रिपोर्ट</p>
+        <div class="lang-sample">इनवॉइस SAL-002: अंतर-राज्य आपूर्ति में CGST+SGST लगाया</div>
+      </div>
+      <div class="lang-card fade-up fade-up-d4">
+        <div class="flag">🏛️</div>
+        <h3>Marathi</h3>
+        <p>मराठी मध्ये ऑडिट अहवाल</p>
+        <div class="lang-sample">बीजक SAL-002: आंतरराज्य पुरवठ्यावर CGST+SGST आकारला</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════ TRUST ══════ -->
+<section class="trust">
+  <div class="container">
+    <div class="section-label">
+      <div class="overline">Built for CAs</div>
+      <h2>Why CAs <span class="grad-text">Love AuditAI</span></h2>
+    </div>
+    <div class="trust-grid">
+      <div class="trust-card fade-up">
+        <div class="quote">"I used to spend 3-4 hours per client matching invoices. AuditAI does it in 2 minutes. The Marathi report feature is amazing for my clients in Pune."</div>
+        <div class="author">Rajesh Patil, CA</div>
+        <div class="role">Pune, Maharashtra</div>
+      </div>
+      <div class="trust-card fade-up fade-up-d2">
+        <div class="quote">"The Notice Predictor warned me about a 78% risk for one client. We fixed 3 issues and it dropped to 15%. Saved my client from a DRC-01 notice."</div>
+        <div class="author">Priya Sharma, CA</div>
+        <div class="role">Mumbai, Maharashtra</div>
+      </div>
+      <div class="trust-card fade-up fade-up-d4">
+        <div class="quote">"Best part — it works with Tally and Busy exports directly. No manual data entry. My staff loves it. At ₹999/month it's a no-brainer."</div>
+        <div class="author">Suresh Kumar, CA</div>
+        <div class="role">Sangli, Maharashtra</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══════ CTA ══════ -->
+<section class="cta-section">
+  <div class="container" style="position:relative;z-index:1">
+    <h2 class="fade-up">Ready to <span class="grad-text">Audit Smarter?</span></h2>
+    <p class="fade-up fade-up-d1">Join CAs across Maharashtra who are saving 150+ hours/month with AI-powered GST compliance.</p>
+    <div class="fade-up fade-up-d2">
+      <a href="https://app.auditai.in/signup" class="btn btn-primary" style="font-size:18px;padding:18px 48px">Start Your Free Audit →</a>
+    </div>
+    <p style="color:var(--muted);font-size:13px;margin-top:16px" class="fade-up fade-up-d3">No credit card required · 3 free audits/month · Cancel anytime</p>
+  </div>
+</section>
+
+<!-- ══════ FOOTER ══════ -->
+<footer>
+  <div class="container">
+    <p>© 2026 AuditAI · Smart GST Compliance · Made in Maharashtra, India</p>
+    <p style="margin-top:8px">
+      <a href="#" style="color:var(--blue)">Privacy Policy</a> · 
+      <a href="#" style="color:var(--blue)">Terms of Service</a> · 
+      <a href="mailto:hello@auditai.in" style="color:var(--blue)">hello@auditai.in</a>
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "gst-audit-middleware",
+  "version": "1.0.0",
+  "description": "GST Audit AI Middleware",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "helmet": "^7.1.0",
+    "cors": "^2.8.5",
+    "multer": "^1.4.5-lts.1",
+    "express-rate-limit": "^7.3.1",
+    "axios": "^1.7.2",
+    "dotenv": "^16.4.5",
+    "morgan": "^1.10.0",
+    "form-data": "^4.0.0",
+    "uuid": "^10.0.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  }
+}
