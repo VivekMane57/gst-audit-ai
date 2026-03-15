@@ -1,0 +1,22 @@
+{
+  "name": "AuditAI — Smart GST Compliance",
+  "short_name": "AuditAI",
+  "description": "AI-powered GST audit tool for Indian CAs",
+  "start_url": "/dashboard",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
