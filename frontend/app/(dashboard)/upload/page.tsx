@@ -25,7 +25,6 @@ const LANGUAGES = [
 type Step = 1 | 2 | 3;
 
 export default function UploadPage() {
-  // ── FIX: isLoaded add kiya
   const { user, isLoaded } = useUser();
   const router  = useRouter();
   const params  = useSearchParams();
@@ -48,7 +47,6 @@ export default function UploadPage() {
   const salesRef    = useRef<HTMLInputElement>(null);
   const purchaseRef = useRef<HTMLInputElement>(null);
 
-  // ── FIX: isLoaded check add kiya
   useEffect(() => {
     if (!prefilledClientId || !isLoaded || !user) return;
     setAuthHeader(user.id);
@@ -87,7 +85,6 @@ export default function UploadPage() {
       const res = await runAudit(form);
       setAuditId(res.data.audit_id);
     } catch (e: any) {
-      // ── FIX: error always string — React object render crash fix
       const detail = e?.response?.data?.detail;
       const msg =
         typeof detail === "string"
@@ -107,30 +104,30 @@ export default function UploadPage() {
   const totalChecks = 6 + (sector ? 4 : 0);
 
   const steps = [
-    { n: 1, label: "Upload Files" },
+    { n: 1, label: "Upload" },
     { n: 2, label: "Configure" },
     { n: 3, label: "Results" },
   ];
 
   return (
-    <div className="p-8 max-w-2xl mx-auto">
+    <div className="px-4 py-5 lg:p-8 max-w-2xl mx-auto">
 
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-900">New Audit</h1>
+      <div className="mb-5 lg:mb-8">
+        <h1 className="text-xl lg:text-2xl font-bold text-gray-900">New Audit</h1>
         {clientName && (
-          <p className="text-blue-600 font-medium mt-1">📁 {clientName}</p>
+          <p className="text-blue-600 font-medium mt-1 text-sm">📁 {clientName}</p>
         )}
-        <p className="text-gray-500 text-sm mt-1">
+        <p className="text-gray-500 text-xs lg:text-sm mt-1">
           Upload sales + purchase Excel files → {totalChecks} checks → 2 minutes
         </p>
       </div>
 
       {/* Step bar */}
-      <div className="flex items-center gap-0 mb-8">
+      <div className="flex items-center gap-0 mb-5 lg:mb-8">
         {steps.map((s, i) => (
           <div key={s.n} className="flex items-center flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5 lg:gap-2">
               <div className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-all
                 ${step > s.n ? "bg-green-500 text-white" :
                   step === s.n ? "bg-blue-600 text-white" :
@@ -151,24 +148,24 @@ export default function UploadPage() {
 
       {/* STEP 1: Upload files */}
       {step === 1 && (
-        <div className="space-y-4">
+        <div className="space-y-3 lg:space-y-4">
           <div
             onClick={() => salesRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all
+            className={`border-2 border-dashed rounded-xl lg:rounded-2xl p-6 lg:p-8 text-center cursor-pointer transition-all active:scale-[0.98]
               ${salesFile ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-blue-400 hover:bg-blue-50"}`}
           >
             <input ref={salesRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
               onChange={e => setSalesFile(e.target.files?.[0] || null)} />
             {salesFile ? (
               <>
-                <CheckCircle className="text-green-500 mx-auto mb-2" size={28} />
-                <p className="font-semibold text-green-700">{salesFile.name}</p>
+                <CheckCircle className="text-green-500 mx-auto mb-2" size={24} />
+                <p className="font-semibold text-green-700 text-sm">{salesFile.name}</p>
                 <p className="text-xs text-green-500 mt-1">Sales register ready</p>
               </>
             ) : (
               <>
-                <FileSpreadsheet className="text-gray-300 mx-auto mb-2" size={28} />
-                <p className="font-semibold text-gray-700">Sales Register</p>
+                <FileSpreadsheet className="text-gray-300 mx-auto mb-2" size={24} />
+                <p className="font-semibold text-gray-700 text-sm">Sales Register</p>
                 <p className="text-xs text-gray-400 mt-1">GSTR-1 data · .xlsx / .csv</p>
               </>
             )}
@@ -176,21 +173,21 @@ export default function UploadPage() {
 
           <div
             onClick={() => purchaseRef.current?.click()}
-            className={`border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all
+            className={`border-2 border-dashed rounded-xl lg:rounded-2xl p-6 lg:p-8 text-center cursor-pointer transition-all active:scale-[0.98]
               ${purchaseFile ? "border-green-400 bg-green-50" : "border-gray-200 hover:border-blue-400 hover:bg-blue-50"}`}
           >
             <input ref={purchaseRef} type="file" accept=".xlsx,.xls,.csv" className="hidden"
               onChange={e => setPurchaseFile(e.target.files?.[0] || null)} />
             {purchaseFile ? (
               <>
-                <CheckCircle className="text-green-500 mx-auto mb-2" size={28} />
-                <p className="font-semibold text-green-700">{purchaseFile.name}</p>
+                <CheckCircle className="text-green-500 mx-auto mb-2" size={24} />
+                <p className="font-semibold text-green-700 text-sm">{purchaseFile.name}</p>
                 <p className="text-xs text-green-500 mt-1">Purchase register ready</p>
               </>
             ) : (
               <>
-                <FileSpreadsheet className="text-gray-300 mx-auto mb-2" size={28} />
-                <p className="font-semibold text-gray-700">Purchase Register</p>
+                <FileSpreadsheet className="text-gray-300 mx-auto mb-2" size={24} />
+                <p className="font-semibold text-gray-700 text-sm">Purchase Register</p>
                 <p className="text-xs text-gray-400 mt-1">GSTR-2B data · .xlsx / .csv</p>
               </>
             )}
@@ -199,7 +196,7 @@ export default function UploadPage() {
           <button
             onClick={() => setStep(2)}
             disabled={!salesFile || !purchaseFile}
-            className="w-full py-3 bg-blue-600 text-white font-semibold rounded-2xl hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl lg:rounded-2xl hover:bg-blue-700 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center gap-2 text-sm active:scale-[0.98] transition-transform"
           >
             Next: Configure <ChevronRight size={16} />
           </button>
@@ -208,7 +205,7 @@ export default function UploadPage() {
 
       {/* STEP 2: Configure */}
       {step === 2 && (
-        <div className="space-y-5">
+        <div className="space-y-4 lg:space-y-5">
 
           <div>
             <label className="block text-sm font-semibold text-gray-700 mb-1">
@@ -242,7 +239,7 @@ export default function UploadPage() {
             <div className="flex gap-2">
               {LANGUAGES.map(l => (
                 <button key={l.value} onClick={() => setLanguage(l.value)}
-                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium border-2 transition-all
+                  className={`flex-1 py-2.5 rounded-xl text-sm font-medium border-2 transition-all active:scale-95
                     ${language === l.value ? "border-blue-500 bg-blue-50 text-blue-700" : "border-gray-200 text-gray-500 hover:border-gray-300"}`}>
                   {l.label}
                 </button>
@@ -254,33 +251,32 @@ export default function UploadPage() {
             <label className="block text-sm font-semibold text-gray-700 mb-2">
               Business Sector
               <span className="text-xs text-gray-400 font-normal ml-2">
-                ({sector ? "4 extra checks" : "select for sector-specific checks"})
+                ({sector ? "4 extra checks" : "select for extra checks"})
               </span>
             </label>
-            <div className="grid grid-cols-4 gap-2">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
               {SECTORS.map(s => (
                 <button key={s.value} onClick={() => setSector(s.value)}
-                  className={`p-2.5 rounded-xl border-2 text-center transition-all
+                  className={`p-2.5 rounded-xl border-2 text-center transition-all active:scale-95
                     ${sector === s.value ? "border-blue-500 bg-blue-50" : "border-gray-200 hover:border-gray-300"}`}>
-                  <div className="text-xl mb-0.5">{s.icon}</div>
-                  <div className="text-xs font-medium text-gray-700 leading-tight">{s.label}</div>
+                  <div className="text-lg lg:text-xl mb-0.5">{s.icon}</div>
+                  <div className="text-[11px] lg:text-xs font-medium text-gray-700 leading-tight">{s.label}</div>
                 </button>
               ))}
             </div>
           </div>
 
-          {/* ── FIX: error always string — never render object */}
           {error && (
             <p className="text-sm text-red-500 bg-red-50 px-4 py-2.5 rounded-xl">{error}</p>
           )}
 
           <div className="flex gap-3 pt-2">
             <button onClick={() => setStep(1)}
-              className="flex-1 py-3 border border-gray-200 rounded-2xl text-sm font-medium text-gray-600 hover:bg-gray-50">
+              className="flex-1 py-3 border border-gray-200 rounded-xl lg:rounded-2xl text-sm font-medium text-gray-600 hover:bg-gray-50 active:scale-[0.98] transition-transform">
               Back
             </button>
             <button onClick={handleRunAudit} disabled={loading}
-              className="flex-2 flex-grow-[2] py-3 bg-blue-600 text-white font-semibold rounded-2xl hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2">
+              className="flex-grow-[2] py-3 bg-blue-600 text-white font-semibold rounded-xl lg:rounded-2xl hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2 text-sm active:scale-[0.98] transition-transform">
               <Upload size={16} />
               Run {totalChecks} Checks
             </button>
@@ -290,15 +286,15 @@ export default function UploadPage() {
 
       {/* STEP 3: Result */}
       {step === 3 && (
-        <div className="text-center py-12">
+        <div className="text-center py-8 lg:py-12">
           {loading ? (
             <>
-              <Loader2 className="text-blue-600 mx-auto mb-4 animate-spin" size={44} />
-              <p className="text-lg font-bold text-gray-900">Running {totalChecks} checks...</p>
-              <p className="text-gray-400 text-sm mt-2">
+              <Loader2 className="text-blue-600 mx-auto mb-4 animate-spin" size={40} />
+              <p className="text-base lg:text-lg font-bold text-gray-900">Running {totalChecks} checks...</p>
+              <p className="text-gray-400 text-xs mt-2">
                 Analysing {salesFile?.name} + {purchaseFile?.name}
               </p>
-              <div className="mt-6 space-y-2 text-xs text-gray-400 text-left bg-gray-50 rounded-2xl p-4">
+              <div className="mt-5 space-y-2 text-xs text-gray-400 text-left bg-gray-50 rounded-xl lg:rounded-2xl p-4">
                 <p>✓ GSTIN validation</p>
                 <p>✓ Tax type check (IGST vs CGST+SGST)</p>
                 <p>✓ Duplicate invoice detection</p>
@@ -311,23 +307,23 @@ export default function UploadPage() {
           ) : error ? (
             <>
               <div className="text-4xl mb-4">❌</div>
-              <p className="text-lg font-bold text-red-600">Audit Failed</p>
+              <p className="text-base lg:text-lg font-bold text-red-600">Audit Failed</p>
               <p className="text-sm text-gray-500 mt-2 mb-6">{error}</p>
               <button onClick={() => { setStep(2); setError(""); }}
-                className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-semibold hover:bg-blue-700">
+                className="px-6 py-3 bg-blue-600 text-white rounded-xl lg:rounded-2xl font-semibold hover:bg-blue-700 text-sm active:scale-95 transition-transform">
                 Try Again
               </button>
             </>
           ) : (
             <>
-              <CheckCircle className="text-green-500 mx-auto mb-4" size={52} />
-              <p className="text-2xl font-bold text-gray-900">Audit Complete! 🎉</p>
-              <p className="text-gray-500 mt-2">
+              <CheckCircle className="text-green-500 mx-auto mb-4" size={44} />
+              <p className="text-xl lg:text-2xl font-bold text-gray-900">Audit Complete! 🎉</p>
+              <p className="text-gray-500 mt-2 text-sm">
                 {clientName ? `${clientName} · ` : ""}{period}
               </p>
-              <div className="flex gap-3 mt-8 justify-center">
+              <div className="flex gap-3 mt-6 lg:mt-8 justify-center">
                 <button onClick={() => router.push(`/reports/${auditId}`)}
-                  className="px-6 py-3 bg-blue-600 text-white rounded-2xl font-semibold hover:bg-blue-700">
+                  className="px-5 lg:px-6 py-3 bg-blue-600 text-white rounded-xl lg:rounded-2xl font-semibold hover:bg-blue-700 text-sm active:scale-95 transition-transform">
                   View Report →
                 </button>
                 <button
@@ -337,7 +333,7 @@ export default function UploadPage() {
                     setPeriod(""); setError(""); setAuditId("");
                     setStep(1);
                   }}
-                  className="px-6 py-3 border border-gray-200 rounded-2xl text-sm font-medium text-gray-600 hover:bg-gray-50">
+                  className="px-5 lg:px-6 py-3 border border-gray-200 rounded-xl lg:rounded-2xl text-sm font-medium text-gray-600 hover:bg-gray-50 active:scale-95 transition-transform">
                   New Audit
                 </button>
               </div>

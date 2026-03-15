@@ -27,7 +27,6 @@ export default function DashboardLayout({
   return (
     <div className="flex h-[100dvh] bg-gray-50">
 
-      {/* ══ Mobile overlay backdrop ══ */}
       {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black/50 z-30 lg:hidden backdrop-blur-sm"
@@ -35,7 +34,6 @@ export default function DashboardLayout({
         />
       )}
 
-      {/* ══ Desktop Sidebar (hidden on mobile) ══ */}
       <aside
         className={`
           fixed lg:static inset-y-0 left-0 z-40
@@ -44,7 +42,6 @@ export default function DashboardLayout({
           ${sidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"}
         `}
       >
-        {/* Logo */}
         <div className="p-5 border-b border-gray-100">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
@@ -63,7 +60,6 @@ export default function DashboardLayout({
           </div>
         </div>
 
-        {/* Nav links */}
         <nav className="flex-1 p-3 space-y-0.5">
           {NAV.map(({ href, label, icon: Icon }) => {
             const active = path === href || path.startsWith(href + "/");
@@ -85,18 +81,15 @@ export default function DashboardLayout({
           })}
         </nav>
 
-        {/* User button */}
         <div className="p-4 border-t border-gray-100 flex items-center gap-3">
           <UserButton afterSignOutUrl="/login" />
           <span className="text-sm text-gray-600">Account</span>
         </div>
       </aside>
 
-      {/* ══ Main Content Area ══ */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
 
-        {/* Mobile top header */}
-        <header className="lg:hidden sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-gray-100 px-4 py-3 flex items-center justify-between safe-top">
+        <header className="lg:hidden sticky top-0 z-20 bg-white/95 backdrop-blur-md border-b border-gray-100 px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setSidebarOpen(true)}
@@ -112,13 +105,11 @@ export default function DashboardLayout({
           <UserButton afterSignOutUrl="/login" />
         </header>
 
-        {/* Scrollable page content */}
         <div className="flex-1 overflow-y-auto pb-20 lg:pb-0">
           {children}
         </div>
 
-        {/* ══ Mobile Bottom Navigation (app feel) ══ */}
-        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-md border-t border-gray-200 safe-bottom">
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-20 bg-white/95 backdrop-blur-md border-t border-gray-200">
           <div className="flex items-center justify-around py-1.5">
             {NAV.map(({ href, label, icon: Icon }) => {
               const active = path === href || path.startsWith(href + "/");
