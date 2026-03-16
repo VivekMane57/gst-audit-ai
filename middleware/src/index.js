@@ -17,6 +17,7 @@ const T = {
 
 const api = axios.create({ baseURL: PYTHON_URL, timeout: T.DEFAULT });
 
+app.set("trust proxy", 1);
 app.use(cors({ origin: "*" }));
 app.use(express.json());
 app.use(rateLimit({ windowMs: 15 * 60 * 1000, max: 300 }));
@@ -26,14 +27,13 @@ const upload = multer({
   limits:  { fileSize: 10 * 1024 * 1024 },
 }).any();
 
-// ── FIX 1: x-clerk-id → x-user-id ───────────────────────────
 const getUserId = (req) =>
   req.headers["x-user-id"] ||
   req.headers["x-clerk-id"] ||
   "";
 
 const proxyHeaders = (req) => ({
-  "x-user-id": getUserId(req),   // ← FIX: was x-clerk-id
+  "x-user-id": getUserId(req),
 });
 
 function handleError(res, err, label) {
@@ -48,7 +48,6 @@ function handleError(res, err, label) {
   return res.status(500).json({ error: err.message });
 }
 
-// ── Health ────────────────────────────────────────────────────
 app.get("/health", async (_req, res) => {
   try {
     const r = await api.get("/health");
@@ -58,7 +57,6 @@ app.get("/health", async (_req, res) => {
   }
 });
 
-// ── Clients ───────────────────────────────────────────────────
 app.get("/api/clients", async (req, res) => {
   try {
     const r = await api.get("/clients", {
@@ -99,12 +97,10 @@ app.delete("/api/clients/:id", async (req, res) => {
   } catch (err) { handleError(res, err, "DELETE /api/clients/:id"); }
 });
 
-// ── Audit POST — FIX 2: sales_file + purchase_file alag bhejo ─
 app.post("/api/audit", upload, async (req, res) => {
   try {
     const files = req.files || [];
 
-    // ── FIX 2: find sales_file and purchase_file by field name
     const salesFile    = files.find(f => f.fieldname === "sales_file");
     const purchaseFile = files.find(f => f.fieldname === "purchase_file");
 
@@ -116,7 +112,6 @@ app.post("/api/audit", upload, async (req, res) => {
 
     const form = new FormData();
 
-    // ── FIX 2: append with correct field names backend expects
     form.append("sales_file", salesFile.buffer, {
       filename:    salesFile.originalname,
       contentType: salesFile.mimetype || "application/octet-stream",
@@ -126,7 +121,6 @@ app.post("/api/audit", upload, async (req, res) => {
       contentType: purchaseFile.mimetype || "application/octet-stream",
     });
 
-    // Text fields
     const textFields = ["our_gstin", "period", "language", "client_id", "sector"];
     textFields.forEach((f) => {
       if (req.body[f] !== undefined && req.body[f] !== "") {
@@ -140,14 +134,13 @@ app.post("/api/audit", upload, async (req, res) => {
       timeout: T.AUDIT,
       headers: {
         ...form.getHeaders(),
-        "x-user-id": getUserId(req),   // ← FIX 1 here too
+        "x-user-id": getUserId(req),
       },
     });
     res.json(r.data);
   } catch (err) { handleError(res, err, "POST /api/audit"); }
 });
 
-// ── Audit GET ─────────────────────────────────────────────────
 app.get("/api/audit/:id", async (req, res) => {
   try {
     const r = await api.get(`/audit/${req.params.id}`, {
@@ -158,7 +151,6 @@ app.get("/api/audit/:id", async (req, res) => {
   } catch (err) { handleError(res, err, "GET /api/audit/:id"); }
 });
 
-// ── Reports ───────────────────────────────────────────────────
 app.get("/api/reports", async (req, res) => {
   try {
     const r = await api.get("/reports", {
@@ -180,7 +172,6 @@ app.get("/api/reports/:id", async (req, res) => {
   } catch (err) { handleError(res, err, "GET /api/reports/:id"); }
 });
 
-// ── PDF download ──────────────────────────────────────────────
 app.get("/api/reports/:id/pdf", async (req, res) => {
   try {
     const r = await api.get(`/reports/${req.params.id}/pdf`, {
@@ -195,7 +186,6 @@ app.get("/api/reports/:id/pdf", async (req, res) => {
   } catch (err) { handleError(res, err, "GET /api/reports/:id/pdf"); }
 });
 
-// ── Start ─────────────────────────────────────────────────────
 app.listen(PORT, () => {
   console.log(`
   ╔══════════════════════════════════════╗
