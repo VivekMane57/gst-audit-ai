@@ -67,3 +67,4 @@ class Invoice(BaseModel):
         if v and isinstance(v, str):
             return v.strip().upper()
         return v
+    
