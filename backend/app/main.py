@@ -54,12 +54,13 @@ app = FastAPI(
     openapi_url = "/openapi.json",
 )
 
+# ── CORS ──────────────────────────────────────────────────────────────────────
 app.add_middleware(
     CORSMiddleware,
-    allow_origins     = settings.allowed_origins,
-    allow_credentials = True,
-    allow_methods     = ["GET", "POST", "PUT", "DELETE"],
-    allow_headers     = ["Authorization", "Content-Type", "X-Clerk-Id", "x-clerk-id"],
+    allow_origins=["*"],       # production me specific URLs daalna
+    allow_credentials=False,   # * ke saath False hona chahiye
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -83,12 +84,6 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 
 # ── Routers ───────────────────────────────────────────────────────────────────
-# Your routers already have full paths inside them:
-#   audit.py   → @router.post("/audit"),    @router.get("/audit/{id}")
-#   clients.py → @router.get("/clients"),   @router.post("/clients") etc.
-#   reports.py → @router.get("/reports"),   @router.get("/reports/{id}/pdf")
-#
-# So prefix="" here — routers own their full paths.
 app.include_router(health.router,                         tags=["Health"])
 app.include_router(audit_router.router,   prefix="",      tags=["Audit"])
 app.include_router(clients_router.router, prefix="",      tags=["Clients"])
