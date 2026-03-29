@@ -9,6 +9,9 @@ class Settings(BaseSettings):
     supabase_service_key: str
     encryption_key: str
     anthropic_api_key: Optional[str] = None
+    resend_api_key: Optional[str] = None
+    from_email: str = "onboarding@resend.dev"
+    google_vision_api_key: Optional[str] = None
     sentry_dsn: Optional[str] = None
     app_name: str = "GST Audit AI"
     app_version: str = "1.0.0"

@@ -1,158 +1,175 @@
 """
-ocr_scanner.py — Extract invoice data from images (photos, scans)
-===================================================================
+ocr_scanner.py — Extract invoice data from images
+===================================================
 Location: app/services/ocr_scanner.py
 
-Handles:
-  - Phone photos of invoices
-  - Scanned bills
-  - WhatsApp images
-  - Handwritten bills (partial — depends on handwriting quality)
-  - Hindi/Marathi text bills
+Priority:
+  1. Google Cloud Vision API (95%+ accuracy)
+  2. Tesseract OCR (fallback — works offline)
 
-Dependencies:
-  pip install pytesseract Pillow --break-system-packages
-  Also install Tesseract OCR:
-    Ubuntu: sudo apt install tesseract-ocr tesseract-ocr-hin tesseract-ocr-mar
-    Windows: Download from https://github.com/UB-Mannheim/tesseract/wiki
-    Railway: Add to Dockerfile or nixpacks
+Setup:
+  .env mein: GOOGLE_VISION_API_KEY=AIzaSy...
+  pip install pytesseract Pillow requests
 """
 
 import re
 import io
+import os
+import base64
 import logging
-from typing import Dict, List, Optional
+import requests
+from typing import Dict, List
 
 logger = logging.getLogger(__name__)
 
 try:
     import pytesseract
-    from PIL import Image, ImageEnhance, ImageFilter
-    OCR_AVAILABLE = True
+    from PIL import Image, ImageEnhance
+    TESSERACT_AVAILABLE = True
 except ImportError:
-    OCR_AVAILABLE = False
-    logger.warning("pytesseract/Pillow not installed. OCR disabled. Run: pip install pytesseract Pillow")
+    TESSERACT_AVAILABLE = False
+    logger.warning("pytesseract/Pillow not installed. Tesseract fallback disabled.")
+
+GOOGLE_VISION_API_KEY = os.getenv("GOOGLE_VISION_API_KEY", "")
+GOOGLE_VISION_URL = "https://vision.googleapis.com/v1/images:annotate"
 
 
 # ═══════════════════════════════════════════════════════════════
-#  REGEX PATTERNS (same as pdf_parser)
+#  REGEX PATTERNS
 # ═══════════════════════════════════════════════════════════════
 
-GSTIN_RE = re.compile(r'\b(\d{2}[A-Z]{5}\d{4}[A-Z][A-Z\d]Z[A-Z\d])\b')
-INVOICE_RE = re.compile(r'(?:Invoice\s*(?:No|Number|#)?\.?\s*[:;]?\s*)([A-Za-z0-9/\-_]+)', re.IGNORECASE)
-DATE_RE = re.compile(r'\b(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4})\b')
-AMOUNT_RE = re.compile(r'(?:Total|Grand\s*Total|Net|Taxable|Amount)[\s:₹]*([0-9,]+\.?\d*)', re.IGNORECASE)
-IGST_RE = re.compile(r'(?:IGST|Integrated)[\s:₹]*([0-9,]+\.?\d*)', re.IGNORECASE)
-CGST_RE = re.compile(r'(?:CGST|Central\s*Tax)[\s:₹]*([0-9,]+\.?\d*)', re.IGNORECASE)
-SGST_RE = re.compile(r'(?:SGST|State\s*Tax)[\s:₹]*([0-9,]+\.?\d*)', re.IGNORECASE)
-HSN_RE = re.compile(r'(?:HSN|SAC)[\s:]*(\d{4,8})', re.IGNORECASE)
-
-# Hindi/Marathi patterns
-HINDI_INVOICE_RE = re.compile(r'(?:बिल\s*(?:नं|क्र|नंबर)?\.?\s*[:;]?\s*)([A-Za-z0-9/\-_]+)', re.IGNORECASE)
-HINDI_AMOUNT_RE = re.compile(r'(?:कुल|योग|रकम|राशि|रक्कम)[\s:₹]*([0-9,]+\.?\d*)', re.IGNORECASE)
+GSTIN_RE    = re.compile(r'\b(\d{2}[A-Za-z]{5}\d{4}[A-Za-z][A-Za-z\d][Zz][A-Za-z\d])\b')
+INVOICE_RE  = re.compile(r'(?:Invoice\s*(?:No|Number|#)?\.?\s*[:;]?\s*)([A-Za-z0-9/\-_]+)', re.IGNORECASE)
+INV_RE2     = re.compile(r'(?:INV|BILL|VCH|RCP)[\-/]?\d{2,}[\-/]?\d{2,}', re.IGNORECASE)
+DATE_RE     = re.compile(r'\b(\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4})\b')
+DATE_RE2    = re.compile(r'\b(\d{1,2}[\-\s](?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*[\-\s]\d{4})\b', re.IGNORECASE)
+SUBTOTAL_RE = re.compile(r'(?:Subtotal|Sub\s*Total|Taxable\s*Value|Net\s*Amount)[\s:₹Rs.]*([0-9,]+\.?\d*)', re.IGNORECASE)
+TOTAL_RE    = re.compile(r'(?:Total\s*Amount|Grand\s*Total|Invoice\s*Total)[\s:₹Rs.]*([0-9,]+\.?\d*)', re.IGNORECASE)
+CGST_RE     = re.compile(r'CGST[\s:@₹Rs.%0-9]*?([0-9,]+\.?\d*)\s*$', re.IGNORECASE | re.MULTILINE)
+SGST_RE     = re.compile(r'(?:SGST|UTGST)[\s:@₹Rs.%0-9]*?([0-9,]+\.?\d*)\s*$', re.IGNORECASE | re.MULTILINE)
+IGST_RE     = re.compile(r'IGST[\s:@₹Rs.%0-9]*?([0-9,]+\.?\d*)\s*$', re.IGNORECASE | re.MULTILINE)
+HSN_RE      = re.compile(r'HSN|SAC', re.IGNORECASE)
+PARTY_RE    = re.compile(r'(?:Bill\s*To|Sold\s*To|Buyer|Ship\s*To|Recipient)\s*[:\n]\s*(.+)', re.IGNORECASE)
 
 
 def _clean_amount(text: str) -> float:
     try:
-        return float(text.replace(',', '').replace('₹', '').strip())
+        return float(re.sub(r'[^\d.]', '', text.replace(',', '')))
     except (ValueError, TypeError):
         return 0.0
 
 
 # ═══════════════════════════════════════════════════════════════
-#  IMAGE PREPROCESSING (improve OCR accuracy)
+#  GOOGLE CLOUD VISION API
 # ═══════════════════════════════════════════════════════════════
 
-def preprocess_image(image: Image.Image) -> Image.Image:
-    """
-    Preprocess image for better OCR accuracy.
-    Handles: poor lighting, blur, rotation, noise.
-    """
-    # Convert to grayscale
+def extract_text_google_vision(image_bytes: bytes) -> str:
+    """Call Google Vision API — returns full OCR text."""
+    if not GOOGLE_VISION_API_KEY:
+        raise ValueError("GOOGLE_VISION_API_KEY not configured")
+
+    payload = {
+        "requests": [{
+            "image": {"content": base64.b64encode(image_bytes).decode("utf-8")},
+            "features": [{"type": "DOCUMENT_TEXT_DETECTION", "maxResults": 1}],
+            "imageContext": {"languageHints": ["en", "hi", "mr"]}
+        }]
+    }
+
+    resp = requests.post(
+        f"{GOOGLE_VISION_URL}?key={GOOGLE_VISION_API_KEY}",
+        json=payload,
+        timeout=15
+    )
+    resp.raise_for_status()
+    data = resp.json()
+
+    responses = data.get("responses", [])
+    if not responses:
+        raise ValueError("Empty response from Google Vision")
+
+    # DOCUMENT_TEXT_DETECTION result
+    full_text = responses[0].get("fullTextAnnotation", {}).get("text", "")
+
+    # Fallback to textAnnotations
+    if not full_text:
+        annotations = responses[0].get("textAnnotations", [])
+        if annotations:
+            full_text = annotations[0].get("description", "")
+
+    # Check for API error
+    if not full_text:
+        err = responses[0].get("error", {})
+        if err:
+            raise ValueError(f"Vision API error: {err.get('message', 'Unknown')}")
+
+    logger.info(f"Google Vision: {len(full_text)} chars extracted")
+    return full_text
+
+
+# ═══════════════════════════════════════════════════════════════
+#  TESSERACT OCR — FALLBACK
+# ═══════════════════════════════════════════════════════════════
+
+def _preprocess(image: "Image.Image") -> "Image.Image":
     img = image.convert('L')
-
-    # Increase contrast
-    enhancer = ImageEnhance.Contrast(img)
-    img = enhancer.enhance(2.0)
-
-    # Increase sharpness
-    enhancer = ImageEnhance.Sharpness(img)
-    img = enhancer.enhance(2.0)
-
-    # Remove noise
-    img = img.filter(ImageFilter.MedianFilter(size=3))
-
-    # Binarize (black and white)
-    threshold = 140
-    img = img.point(lambda x: 255 if x > threshold else 0)
-
-    # Resize if too small (OCR works better on larger images)
-    width, height = img.size
-    if width < 1000:
-        scale = 1000 / width
-        img = img.resize((int(width * scale), int(height * scale)), Image.LANCZOS)
-
+    w, h = img.size
+    if w < 1200:
+        img = img.resize((int(w * 1200 / w), int(h * 1200 / w)), Image.LANCZOS)
+    img = ImageEnhance.Contrast(img).enhance(1.8)
+    img = ImageEnhance.Sharpness(img).enhance(2.0)
+    img = img.point(lambda x: 255 if x > 150 else 0)
     return img
 
 
-# ═══════════════════════════════════════════════════════════════
-#  OCR TEXT EXTRACTION
-# ═══════════════════════════════════════════════════════════════
+def extract_text_tesseract(image_bytes: bytes) -> str:
+    """Tesseract OCR fallback — English first approach."""
+    if not TESSERACT_AVAILABLE:
+        raise ValueError("Tesseract not available")
 
-def extract_text_from_image(
-    image_bytes: bytes,
-    languages: str = "eng+hin+mar",
-) -> str:
-    """
-    Extract text from image using Tesseract OCR.
+    img = Image.open(io.BytesIO(image_bytes))
+    proc = _preprocess(img)
 
-    Args:
-        image_bytes: Raw image bytes
-        languages: Tesseract language codes (eng, hin, mar)
+    text = pytesseract.image_to_string(proc, lang="eng", config='--psm 6 --oem 3')
 
-    Returns:
-        Extracted text string
-    """
-    if not OCR_AVAILABLE:
-        raise ValueError("OCR not available. Install pytesseract and Pillow.")
+    # If English weak, try multilingual
+    if not GSTIN_RE.search(text) and not re.search(r'\d{3,}', text):
+        logger.info("English weak, trying eng+hin+mar")
+        text_multi = pytesseract.image_to_string(proc, lang="eng+hin+mar", config='--psm 6 --oem 3')
+        if len(text_multi) > len(text):
+            text = text_multi
 
-    try:
-        image = Image.open(io.BytesIO(image_bytes))
-
-        # Preprocess for better accuracy
-        processed = preprocess_image(image)
-
-        # Run OCR with multiple languages
-        text = pytesseract.image_to_string(
-            processed,
-            lang=languages,
-            config='--psm 6 --oem 3',
-        )
-
-        logger.info(f"OCR extracted {len(text)} characters")
-        return text
-
-    except Exception as e:
-        logger.error(f"OCR extraction failed: {e}")
-        raise ValueError(f"Cannot extract text from image: {e}")
+    logger.info(f"Tesseract: {len(text)} chars extracted")
+    return text
 
 
 # ═══════════════════════════════════════════════════════════════
-#  INVOICE DATA EXTRACTION FROM OCR TEXT
+#  MAIN TEXT EXTRACTOR
 # ═══════════════════════════════════════════════════════════════
 
-def extract_invoice_from_image(
-    image_bytes: bytes,
-    languages: str = "eng+hin+mar",
-) -> Dict:
+def extract_text_from_image(image_bytes: bytes) -> str:
     """
-    Extract invoice data from image.
-
-    Returns dict with: invoice_number, party_gstin, taxable_value,
-    igst, cgst, sgst, date, hsn_code, party_name
+    Google Vision first (95% accuracy), Tesseract fallback.
     """
-    text = extract_text_from_image(image_bytes, languages)
+    if GOOGLE_VISION_API_KEY:
+        try:
+            text = extract_text_google_vision(image_bytes)
+            if text and len(text) > 20:
+                return text
+        except Exception as e:
+            logger.warning(f"Google Vision failed → Tesseract fallback: {e}")
 
+    if TESSERACT_AVAILABLE:
+        return extract_text_tesseract(image_bytes)
+
+    raise ValueError("No OCR engine available. Set GOOGLE_VISION_API_KEY or install Tesseract.")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  PARSE INVOICE FROM TEXT
+# ═══════════════════════════════════════════════════════════════
+
+def _parse_invoice_from_text(text: str, source: str = "image_ocr") -> Dict:
     invoice = {
         "invoice_number": None,
         "date": None,
@@ -164,113 +181,140 @@ def extract_invoice_from_image(
         "sgst": 0.0,
         "total_amount": 0.0,
         "hsn_code": None,
-        "ocr_text": text[:1000],
-        "ocr_confidence": "medium",
-        "source": "image_ocr",
+        "ocr_text": text[:1500],
+        "ocr_confidence": "low",
+        "source": source,
     }
 
     # GSTIN
-    gstins = GSTIN_RE.findall(text)
+    gstins = [g.upper() for g in GSTIN_RE.findall(text)]
     if gstins:
         invoice["party_gstin"] = gstins[0]
+        logger.info(f"GSTINs detected: {gstins}")
 
-    # Invoice number — try English then Hindi
-    inv_match = INVOICE_RE.search(text)
-    if not inv_match:
-        inv_match = HINDI_INVOICE_RE.search(text)
-    if inv_match:
-        invoice["invoice_number"] = inv_match.group(1).strip()
+    # Invoice Number
+    m = INVOICE_RE.search(text)
+    invoice["invoice_number"] = m.group(1).strip() if m else (
+        INV_RE2.search(text).group(0).upper() if INV_RE2.search(text) else None
+    )
 
     # Date
-    date_match = DATE_RE.search(text)
-    if date_match:
-        invoice["date"] = date_match.group(1)
+    m = DATE_RE2.search(text) or DATE_RE.search(text)
+    if m:
+        invoice["date"] = m.group(1)
 
-    # Amounts — English
-    amount_match = AMOUNT_RE.search(text)
-    if amount_match:
-        invoice["taxable_value"] = _clean_amount(amount_match.group(1))
-
-    # Amounts — Hindi/Marathi fallback
-    if invoice["taxable_value"] == 0:
-        hindi_amount = HINDI_AMOUNT_RE.search(text)
-        if hindi_amount:
-            invoice["taxable_value"] = _clean_amount(hindi_amount.group(1))
-
-    # Tax amounts
-    igst_match = IGST_RE.search(text)
-    if igst_match:
-        invoice["igst"] = _clean_amount(igst_match.group(1))
-
-    cgst_match = CGST_RE.search(text)
-    if cgst_match:
-        invoice["cgst"] = _clean_amount(cgst_match.group(1))
-
-    sgst_match = SGST_RE.search(text)
-    if sgst_match:
-        invoice["sgst"] = _clean_amount(sgst_match.group(1))
-
-    # HSN
-    hsn_match = HSN_RE.search(text)
-    if hsn_match:
-        invoice["hsn_code"] = hsn_match.group(1)
+    # Subtotal
+    m = SUBTOTAL_RE.search(text)
+    if m:
+        invoice["taxable_value"] = _clean_amount(m.group(1))
 
     # Total
-    total = invoice["taxable_value"] + invoice["igst"] + invoice["cgst"] + invoice["sgst"]
-    invoice["total_amount"] = total if total > 0 else invoice["taxable_value"]
+    m = TOTAL_RE.search(text)
+    if m:
+        invoice["total_amount"] = _clean_amount(m.group(1))
 
-    # Confidence based on fields found
-    fields_found = sum(1 for v in [
-        invoice["invoice_number"], invoice["party_gstin"],
-        invoice["taxable_value"], invoice["date"]
+    taxable = invoice["taxable_value"]
+
+    # CGST
+    m = CGST_RE.search(text)
+    if m:
+        v = _clean_amount(m.group(1))
+        if taxable == 0 or v < taxable:
+            invoice["cgst"] = v
+
+    # SGST
+    m = SGST_RE.search(text)
+    if m:
+        v = _clean_amount(m.group(1))
+        if taxable == 0 or v < taxable:
+            invoice["sgst"] = v
+
+    # IGST
+    m = IGST_RE.search(text)
+    if m:
+        v = _clean_amount(m.group(1))
+        if taxable == 0 or v < taxable:
+            invoice["igst"] = v
+
+    # Calculate total if missing
+    if invoice["total_amount"] == 0 and invoice["taxable_value"] > 0:
+        invoice["total_amount"] = (
+            invoice["taxable_value"] + invoice["igst"]
+            + invoice["cgst"] + invoice["sgst"]
+        )
+
+    # HSN Code
+    lines = text.split('\n')
+    for i, line in enumerate(lines):
+        if HSN_RE.search(line):
+            area = '\n'.join(lines[max(0, i):i + 5])
+            hsn8 = re.findall(r'\b(\d{8})\b', area)
+            if hsn8:
+                invoice["hsn_code"] = hsn8[0]
+                break
+            hsn4 = re.findall(r'\b(\d{4})\b', area)
+            if hsn4:
+                invoice["hsn_code"] = hsn4[0]
+                break
+
+    # Party Name
+    m = PARTY_RE.search(text)
+    if m:
+        name = m.group(1).strip().split('\n')[0].strip()
+        if 3 < len(name) < 100:
+            invoice["party_name"] = name
+
+    # Confidence score
+    fields_ok = sum(1 for v in [
+        invoice["invoice_number"],
+        invoice["party_gstin"],
+        invoice["taxable_value"] > 0,
+        invoice["date"],
+        (invoice["cgst"] > 0 or invoice["igst"] > 0 or invoice["sgst"] > 0),
     ] if v)
+
     invoice["ocr_confidence"] = (
-        "high" if fields_found >= 3 else
-        "medium" if fields_found >= 2 else
+        "high"   if fields_ok >= 4 else
+        "medium" if fields_ok >= 2 else
         "low"
     )
 
+    logger.info(
+        f"OCR parsed: inv={invoice['invoice_number']}, "
+        f"gstin={invoice['party_gstin']}, "
+        f"taxable={invoice['taxable_value']}, "
+        f"confidence={invoice['ocr_confidence']}"
+    )
     return invoice
 
 
 # ═══════════════════════════════════════════════════════════════
-#  BATCH: MULTIPLE IMAGES
+#  PUBLIC API
 # ═══════════════════════════════════════════════════════════════
 
-def scan_multiple_images(
-    image_files: List[tuple],
-    languages: str = "eng+hin+mar",
-) -> List[Dict]:
-    """
-    Scan multiple invoice images.
+def extract_invoice_from_image(image_bytes: bytes, languages: str = "eng") -> Dict:
+    """Main function — extract invoice data from image bytes."""
+    text = extract_text_from_image(image_bytes)
+    return _parse_invoice_from_text(text, source="image_ocr")
 
-    Args:
-        image_files: List of (filename, bytes) tuples
 
-    Returns:
-        List of extracted invoice dicts
-    """
+def scan_multiple_images(image_files: List[tuple], languages: str = "eng") -> List[Dict]:
+    """Scan multiple invoice images."""
     results = []
     for filename, file_bytes in image_files:
         try:
             invoice = extract_invoice_from_image(file_bytes, languages)
             invoice["source_file"] = filename
             results.append(invoice)
-            logger.info(f"Scanned {filename}: GSTIN={invoice.get('party_gstin')}, Amount={invoice.get('taxable_value')}")
         except Exception as e:
             logger.warning(f"Failed to scan {filename}: {e}")
             results.append({
                 "source_file": filename,
                 "error": str(e),
-                "ocr_confidence": "failed",
+                "ocr_confidence": "failed"
             })
-
     return results
 
-
-# ═══════════════════════════════════════════════════════════════
-#  CONVERT TO INVOICE OBJECTS
-# ═══════════════════════════════════════════════════════════════
 
 def scan_image_to_invoices(
     image_bytes: bytes,
@@ -279,25 +323,19 @@ def scan_image_to_invoices(
     our_gstin: str = "",
     period: str = "",
 ) -> list:
-    """
-    Scan image and convert to Invoice objects.
-    Can be used directly in audit router.
-    """
+    """Scan image and return Invoice model objects."""
     from app.models.invoice import Invoice, InvoiceType
 
     inv_type = InvoiceType.SALE if invoice_type in ("sale", "sales") else InvoiceType.PURCHASE
-
     raw = extract_invoice_from_image(image_bytes)
 
     if raw.get("ocr_confidence") == "failed":
         return []
 
     try:
-        inv_no = raw.get("invoice_number") or f"OCR-{filename[:10]}"
-
         invoice = Invoice(
             invoice_type=inv_type,
-            invoice_number=inv_no,
+            invoice_number=raw.get("invoice_number") or f"OCR-{filename[:10]}",
             our_gstin=our_gstin,
             period=period,
             party_name=raw.get("party_name"),
