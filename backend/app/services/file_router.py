@@ -3,15 +3,10 @@ file_router.py — Smart file type detection + routing to correct parser
 ========================================================================
 Location: app/services/file_router.py
 
-Detects file type from extension + content and routes to:
-  - Excel parser (.xlsx, .xls, .csv)
-  - PDF parser (.pdf)
-  - Image OCR (.jpg, .jpeg, .png, .webp)
-  - Tally XML parser (.xml)
-
-Usage:
-  from app.services.file_router import parse_any_file
-  invoices = parse_any_file(file_bytes, filename, invoice_type, our_gstin, period)
+CHANGE from original:
+  - parse_any_file() mein `language: str = "en"` param add kiya (backward compatible)
+  - image route mein language pass hota hai ocr_scanner ko
+  - Baaki sab UNCHANGED
 """
 
 import logging
@@ -80,21 +75,23 @@ def _detect_file_type(filename: str, file_bytes: bytes) -> str:
 
 
 def parse_any_file(
-    file_bytes: bytes,
-    filename: str,
+    file_bytes:   bytes,
+    filename:     str,
     invoice_type: str = "purchase",
-    our_gstin: str = "",
-    period: str = "",
+    our_gstin:    str = "",
+    period:       str = "",
+    language:     str = "en",        # ← ONLY NEW PARAM (default "en" = backward compatible)
 ) -> list:
     """
     Smart parser — detects file type and routes to correct parser.
 
     Args:
-        file_bytes: Raw file bytes
-        filename: Original filename
+        file_bytes:   Raw file bytes
+        filename:     Original filename
         invoice_type: "sale" or "purchase"
-        our_gstin: Company GSTIN
-        period: Audit period
+        our_gstin:    Company GSTIN
+        period:       Audit period
+        language:     Language hint for OCR — "en", "hi", "mr" (only used for images)
 
     Returns:
         List of Invoice objects
@@ -124,12 +121,18 @@ def parse_any_file(
 
     elif file_type == "image":
         from app.services.ocr_scanner import scan_image_to_invoices
+        # ← language encode into filename so ocr_scanner picks it up
+        lang_filename = filename
+        if language in ("hi", "mr"):
+            stem, _, ext = filename.rpartition(".")
+            lang_filename = f"{stem}_{language}.{ext}" if stem else f"{filename}_{language}"
+
         return scan_image_to_invoices(
-            file_bytes,
-            filename=filename,
-            invoice_type=invoice_type,
-            our_gstin=our_gstin,
-            period=period,
+            image_bytes  = file_bytes,
+            filename     = lang_filename,
+            invoice_type = invoice_type,
+            our_gstin    = our_gstin,
+            period       = period,
         )
 
     elif file_type == "tally_xml":
@@ -187,8 +190,8 @@ def get_supported_formats() -> dict:
         pass
 
     return {
-        "excel": {"supported": True, "extensions": [".xlsx", ".xls", ".csv"]},
-        "pdf": {"supported": pdf_ok, "extensions": [".pdf"]},
-        "image": {"supported": ocr_ok, "extensions": [".jpg", ".jpeg", ".png", ".webp"]},
-        "tally_xml": {"supported": xml_ok, "extensions": [".xml"]},
+        "excel":      {"supported": True,    "extensions": [".xlsx", ".xls", ".csv"]},
+        "pdf":        {"supported": pdf_ok,  "extensions": [".pdf"]},
+        "image":      {"supported": ocr_ok,  "extensions": [".jpg", ".jpeg", ".png", ".webp"]},
+        "tally_xml":  {"supported": xml_ok,  "extensions": [".xml"]},
     }

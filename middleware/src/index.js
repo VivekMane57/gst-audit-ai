@@ -281,7 +281,6 @@
  * Clean Architecture (diagram ke hisaab se):
  *   Request → globalLimiter → cors → auth headers → routes → Python backend
  */
-
 require("dotenv").config();
 
 const express = require("express");
@@ -296,6 +295,7 @@ const clientsRouter      = require("./routes/clients");
 const reportsRouter      = require("./routes/reports");
 const hsnRouter          = require("./routes/hsn");
 const healthRouter       = require("./routes/health");
+const noticeQueueRouter  = require("./routes/noticeQueue");   // ← Added
 
 const app  = express();
 const PORT = process.env.PORT || 3001;
@@ -327,11 +327,12 @@ app.use((req, _res, next) => {
 // ══════════════════════════════════════════════════════════════════════════
 // Routes — thin API layer (auth check + validate + forward to Python)
 // ══════════════════════════════════════════════════════════════════════════
-app.use("/health",       healthRouter);
-app.use("/api/audit",    auditRouter);
-app.use("/api/clients",  clientsRouter);
-app.use("/api/reports",  reportsRouter);
-app.use("/api/hsn",      hsnRouter);
+app.use("/health",              healthRouter);
+app.use("/api/audit",           auditRouter);
+app.use("/api/clients",         clientsRouter);
+app.use("/api/reports",         reportsRouter);
+app.use("/api/hsn",             hsnRouter);
+app.use("/api/notice-queue",    noticeQueueRouter);   // ← Added
 
 // ── 404 + Global error handler ─────────────────────────────────────────────
 app.use(notFound);
@@ -350,4 +351,4 @@ app.listen(PORT, () => {
   `);
 });
 
-module.exports = app; // testing ke liye
+module.exports = app;

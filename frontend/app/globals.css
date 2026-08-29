@@ -2,135 +2,152 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500&display=swap');
+@layer base {
+  :root {
+    /* ── Shadcn required variables (hsl — Tailwind v3 compatible) ── */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 221.2 83.2% 53.3%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --radius: 0.625rem;
 
-:root {
-  /* Brand Colors */
-  --brand-50: #EEF4FF;
-  --brand-100: #DAE6FF;
-  --brand-200: #BDD4FF;
-  --brand-400: #6DA3FF;
-  --brand-500: #3B7DFF;
-  --brand-600: #1A5CFF;
-  --brand-700: #0040E0;
+    /* ── Brand Colors ── */
+    --brand-50: #EEF4FF;
+    --brand-100: #DAE6FF;
+    --brand-200: #BDD4FF;
+    --brand-400: #6DA3FF;
+    --brand-500: #3B7DFF;
+    --brand-600: #1A5CFF;
+    --brand-700: #0040E0;
 
-  /* Accent */
-  --accent-green: #10B981;
-  --accent-red: #EF4444;
-  --accent-orange: #F59E0B;
-  --accent-purple: #8B5CF6;
+    /* ── Accent ── */
+    --accent-green: #10B981;
+    --accent-red: #EF4444;
+    --accent-orange: #F59E0B;
+    --accent-purple: #8B5CF6;
 
-  /* Surfaces */
-  --surface-bg: #F8FAFC;
-  --surface-card: #FFFFFF;
-  --surface-hover: #F1F5F9;
-  --surface-border: #E2E8F0;
-  --surface-border-light: #F1F5F9;
+    /* ── Surfaces ── */
+    --surface-bg: #F8FAFC;
+    --surface-card: #FFFFFF;
+    --surface-hover: #F1F5F9;
+    --surface-border: #E2E8F0;
+    --surface-border-light: #F1F5F9;
 
-  /* Text */
-  --text-primary: #0F172A;
-  --text-secondary: #475569;
-  --text-muted: #94A3B8;
-  --text-inverse: #FFFFFF;
+    /* ── Text ── */
+    --text-primary: #0F172A;
+    --text-secondary: #475569;
+    --text-muted: #94A3B8;
+    --text-inverse: #FFFFFF;
 
-  /* Shadows */
-  --shadow-sm: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.03);
-  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.03);
-  --shadow-lg: 0 10px 25px -5px rgba(0,0,0,0.06), 0 8px 10px -6px rgba(0,0,0,0.03);
-  --shadow-card: 0 1px 3px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.02);
+    /* ── Shadows ── */
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.04), 0 1px 3px rgba(0,0,0,0.03);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -2px rgba(0,0,0,0.03);
+    --shadow-lg: 0 10px 25px -5px rgba(0,0,0,0.06), 0 8px 10px -6px rgba(0,0,0,0.03);
+    --shadow-card: 0 1px 3px rgba(0,0,0,0.04), 0 0 0 1px rgba(0,0,0,0.02);
 
-  /* Radius */
-  --radius-sm: 8px;
-  --radius-md: 12px;
-  --radius-lg: 16px;
-  --radius-xl: 20px;
-  --radius-full: 9999px;
+    /* ── Radius ── */
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --radius-xl: 20px;
+    --radius-full: 9999px;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+
+  /* ── IMPORTANT: No border-color here — causes "border-border does not exist" in Tailwind v3 ── */
+  * {
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    font-family: var(--font-sans, 'DM Sans'), -apple-system, BlinkMacSystemFont, sans-serif;
+  }
+
+  html {
+    scroll-behavior: smooth;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }
 
-* {
-  box-sizing: border-box;
-  -webkit-tap-highlight-color: transparent;
-}
-
-html {
-  scroll-behavior: smooth;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-body {
-  font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
-  color: var(--text-primary);
-  background: var(--surface-bg);
-}
-
-/* Monospace for GSTIN, numbers */
+/* ── Monospace ── */
 .font-mono {
   font-family: 'JetBrains Mono', monospace;
 }
 
-/* Scrollbar styling */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-::-webkit-scrollbar-thumb {
-  background: #CBD5E1;
-  border-radius: 999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #94A3B8;
-}
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
 
-/* Hide scrollbar for mobile swipe */
-.scrollbar-hide::-webkit-scrollbar {
-  display: none;
-}
-.scrollbar-hide {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
+.scrollbar-hide::-webkit-scrollbar { display: none; }
+.scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Animations */
+/* ── Animations ── */
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes slideUp {
   from { opacity: 0; transform: translateY(16px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-
 @keyframes scaleIn {
   from { opacity: 0; transform: scale(0.95); }
-  to { opacity: 1; transform: scale(1); }
+  to   { opacity: 1; transform: scale(1); }
 }
-
 @keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
 }
-
 @keyframes pulse-ring {
-  0% { box-shadow: 0 0 0 0 rgba(59, 125, 255, 0.3); }
-  100% { box-shadow: 0 0 0 12px rgba(59, 125, 255, 0); }
+  0%   { box-shadow: 0 0 0 0    rgba(59,125,255,0.3); }
+  100% { box-shadow: 0 0 0 12px rgba(59,125,255,0);   }
 }
 
-.animate-fade-in {
-  animation: fadeIn 0.4s ease-out;
-}
-
-.animate-slide-up {
-  animation: slideUp 0.5s ease-out;
-}
-
-.animate-scale-in {
-  animation: scaleIn 0.3s ease-out;
-}
+.animate-fade-in  { animation: fadeIn  0.4s ease-out; }
+.animate-slide-up { animation: slideUp 0.5s ease-out; }
+.animate-scale-in { animation: scaleIn 0.3s ease-out; }
 
 .animate-shimmer {
   background: linear-gradient(90deg, #f1f5f9 25%, #e2e8f0 50%, #f1f5f9 75%);
@@ -138,16 +155,10 @@ body {
   animation: shimmer 1.5s infinite;
 }
 
-/* Card hover effect */
-.card-hover {
-  transition: all 0.2s ease;
-}
-.card-hover:hover {
-  box-shadow: var(--shadow-md);
-  transform: translateY(-1px);
-}
+/* ── Utility classes ── */
+.card-hover { transition: all 0.2s ease; }
+.card-hover:hover { box-shadow: var(--shadow-md); transform: translateY(-1px); }
 
-/* Gradient text */
 .gradient-text {
   background: linear-gradient(135deg, var(--brand-600), var(--accent-purple));
   -webkit-background-clip: text;
@@ -155,19 +166,16 @@ body {
   background-clip: text;
 }
 
-/* Brand gradient background */
 .brand-gradient {
   background: linear-gradient(135deg, var(--brand-600), var(--brand-700));
 }
 
-/* Glass effect */
 .glass {
-  background: rgba(255, 255, 255, 0.92);
+  background: rgba(255,255,255,0.92);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }
 
-/* Stat card gradient borders */
 .stat-card {
   position: relative;
   background: white;
@@ -180,18 +188,13 @@ body {
   box-shadow: var(--shadow-md);
 }
 
-/* Input focus style */
 input:focus, select:focus {
   border-color: var(--brand-400) !important;
-  box-shadow: 0 0 0 3px rgba(59, 125, 255, 0.1) !important;
+  box-shadow: 0 0 0 3px rgba(59,125,255,0.1) !important;
 }
 
-/* Button press effect */
-.btn-press:active {
-  transform: scale(0.97);
-}
+.btn-press:active { transform: scale(0.97); }
 
-/* Score ring */
 .score-ring {
   border-radius: var(--radius-md);
   display: flex;

@@ -1,27 +1,29 @@
 """
-ocr_scanner.py — Extract invoice data from images
-===================================================
-Location: app/services/ocr_scanner.py
+app/services/ocr_scanner.py  (MODIFIED — backward-compatible)
 
-Priority:
-  1. Google Cloud Vision API (95%+ accuracy)
-  2. Tesseract OCR (fallback — works offline)
+Public API is UNCHANGED — same signatures as before:
 
-Setup:
-  .env mein: GOOGLE_VISION_API_KEY=AIzaSy...
-  pip install pytesseract Pillow requests
+  scan_image_to_invoices(image_bytes, filename, invoice_type, our_gstin, period) → list[Invoice]
+  extract_invoice_from_image(image_bytes, languages) → Dict
+  scan_multiple_images(image_files, languages) → List[Dict]
+
+Internally delegates to new OCR module. Tesseract stays as last-resort fallback.
+Feature flags:
+  USE_OCR_ROUTER=false (default) — transparent pass-through, same as before
+  USE_OCR_ROUTER=true            — smart language routing
+  ENABLE_AWS_TEXTRACT=true       — adds Textract for English
 """
+from __future__ import annotations
 
-import re
 import io
-import os
-import base64
 import logging
-import requests
-from typing import Dict, List
+import os
+import re
+from typing import Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
+# ── Tesseract (optional, same as before) ──────────────────────────────────
 try:
     import pytesseract
     from PIL import Image, ImageEnhance
@@ -30,14 +32,20 @@ except ImportError:
     TESSERACT_AVAILABLE = False
     logger.warning("pytesseract/Pillow not installed. Tesseract fallback disabled.")
 
-GOOGLE_VISION_API_KEY = os.getenv("GOOGLE_VISION_API_KEY", "")
-GOOGLE_VISION_URL = "https://vision.googleapis.com/v1/images:annotate"
+# ── New OCR module ─────────────────────────────────────────────────────────
+from app.services.ocr import OCRLanguage, OCRProvider, OCRResult, OCRRouter
 
+# ── Language map: str → OCRLanguage ───────────────────────────────────────
+_LANG_MAP = {
+    "en":  OCRLanguage.ENGLISH,
+    "hi":  OCRLanguage.HINDI,
+    "mr":  OCRLanguage.MARATHI,
+    "eng": OCRLanguage.ENGLISH,
+    "hin": OCRLanguage.HINDI,
+    "mar": OCRLanguage.MARATHI,
+}
 
-# ═══════════════════════════════════════════════════════════════
-#  REGEX PATTERNS
-# ═══════════════════════════════════════════════════════════════
-
+# ── Keep existing regex constants (used by extract_invoice_from_image) ────
 GSTIN_RE    = re.compile(r'\b(\d{2}[A-Za-z]{5}\d{4}[A-Za-z][A-Za-z\d][Zz][A-Za-z\d])\b')
 INVOICE_RE  = re.compile(r'(?:Invoice\s*(?:No|Number|#)?\.?\s*[:;]?\s*)([A-Za-z0-9/\-_]+)', re.IGNORECASE)
 INV_RE2     = re.compile(r'(?:INV|BILL|VCH|RCP)[\-/]?\d{2,}[\-/]?\d{2,}', re.IGNORECASE)
@@ -60,58 +68,165 @@ def _clean_amount(text: str) -> float:
 
 
 # ═══════════════════════════════════════════════════════════════
-#  GOOGLE CLOUD VISION API
+#  MAIN PUBLIC API  (signature UNCHANGED)
+# ═══════════════════════════════════════════════════════════════
+
+def scan_image_to_invoices(
+    image_bytes:  bytes,
+    filename:     str,
+    invoice_type: str = "purchase",
+    our_gstin:    str = "",
+    period:       str = "",
+) -> list:
+    """
+    Scan image bytes and return Invoice model objects.
+    Signature identical to existing code — drop-in replacement.
+    """
+    from app.models.invoice import Invoice, InvoiceType
+
+    inv_type = InvoiceType.SALE if invoice_type in ("sale", "sales") else InvoiceType.PURCHASE
+
+    # ── Detect language from filename or default to auto ──────
+    ocr_language = _detect_language_from_filename(filename)
+
+    # ── 1. Try OCR module engines ─────────────────────────────
+    router = OCRRouter.build()
+    result: Optional[OCRResult] = router.route(image_bytes, ocr_language)
+
+    # ── 2. Tesseract fallback ─────────────────────────────────
+    if result is None or not result.is_usable():
+        logger.info("Falling back to Tesseract for %s", filename)
+        raw = _tesseract_extract(image_bytes)
+        if raw.get("ocr_confidence") == "failed":
+            return []
+        return _raw_dict_to_invoices(raw, inv_type, our_gstin, period, filename)
+
+    # ── 3. OCRResult → Invoice ────────────────────────────────
+    if not result.success:
+        return []
+
+    try:
+        ext = result.extracted
+        invoice = Invoice(
+            invoice_type  = inv_type,
+            invoice_number= ext.invoice_number or f"OCR-{filename[:10]}",
+            our_gstin     = our_gstin,
+            period        = period,
+            party_name    = ext.party_name,
+            party_gstin   = ext.party_gstin,
+            taxable_value = ext.taxable_value,
+            igst          = ext.igst,
+            cgst          = ext.cgst,
+            sgst          = ext.sgst,
+            invoice_date  = ext.invoice_date,
+            hsn_code      = ext.hsn_code,
+            irn           = ext.irn,
+        )
+        return [invoice]
+    except Exception as exc:
+        logger.warning("Skip OCR invoice (%s): %s", filename, exc)
+        return []
+
+
+# ═══════════════════════════════════════════════════════════════
+#  LEGACY API — kept for any code that calls these directly
+# ═══════════════════════════════════════════════════════════════
+
+def extract_invoice_from_image(image_bytes: bytes, languages: str = "eng") -> Dict:
+    """Legacy function — still works. Returns raw dict (same shape as before)."""
+    # Try new engine first
+    lang = _LANG_MAP.get(languages, OCRLanguage.AUTO)
+    router = OCRRouter.build()
+    result = router.route(image_bytes, lang)
+
+    if result and result.is_usable():
+        return _ocr_result_to_raw_dict(result)
+
+    # Fallback to Tesseract
+    return _tesseract_extract(image_bytes)
+
+
+def scan_multiple_images(image_files: List[tuple], languages: str = "eng") -> List[Dict]:
+    """Scan multiple invoice images. Signature unchanged."""
+    results = []
+    for filename, file_bytes in image_files:
+        try:
+            invoice = extract_invoice_from_image(file_bytes, languages)
+            invoice["source_file"] = filename
+            results.append(invoice)
+        except Exception as e:
+            logger.warning("Failed to scan %s: %s", filename, e)
+            results.append({
+                "source_file":      filename,
+                "error":            str(e),
+                "ocr_confidence":   "failed",
+            })
+    return results
+
+
+# ═══════════════════════════════════════════════════════════════
+#  TESSERACT FALLBACK (preserved from original)
 # ═══════════════════════════════════════════════════════════════
 
 def extract_text_google_vision(image_bytes: bytes) -> str:
-    """Call Google Vision API — returns full OCR text."""
-    if not GOOGLE_VISION_API_KEY:
-        raise ValueError("GOOGLE_VISION_API_KEY not configured")
+    """
+    Direct Google Vision call — kept for backward compat.
+    New code should use OCRRouter instead.
+    """
+    from app.services.ocr.google_vision import GoogleVisionOCR
+    engine = GoogleVisionOCR()
+    result = engine._call_api(image_bytes, OCRLanguage.AUTO)
+    if result:
+        responses = result.get("responses", [{}])
+        return responses[0].get("fullTextAnnotation", {}).get("text", "") if responses else ""
+    raise ValueError("Google Vision API call failed.")
 
-    payload = {
-        "requests": [{
-            "image": {"content": base64.b64encode(image_bytes).decode("utf-8")},
-            "features": [{"type": "DOCUMENT_TEXT_DETECTION", "maxResults": 1}],
-            "imageContext": {"languageHints": ["en", "hi", "mr"]}
-        }]
-    }
 
-    resp = requests.post(
-        f"{GOOGLE_VISION_URL}?key={GOOGLE_VISION_API_KEY}",
-        json=payload,
-        timeout=15
-    )
-    resp.raise_for_status()
-    data = resp.json()
+def extract_text_tesseract(image_bytes: bytes) -> str:
+    """Direct Tesseract call — kept for backward compat."""
+    if not TESSERACT_AVAILABLE:
+        raise ValueError("Tesseract not available")
+    img  = Image.open(io.BytesIO(image_bytes))
+    proc = _preprocess(img)
+    text = pytesseract.image_to_string(proc, lang="eng", config='--psm 6 --oem 3')
+    if not GSTIN_RE.search(text) and not re.search(r'\d{3,}', text):
+        text_multi = pytesseract.image_to_string(proc, lang="eng+hin+mar", config='--psm 6 --oem 3')
+        if len(text_multi) > len(text):
+            text = text_multi
+    return text
 
-    responses = data.get("responses", [])
-    if not responses:
-        raise ValueError("Empty response from Google Vision")
 
-    # DOCUMENT_TEXT_DETECTION result
-    full_text = responses[0].get("fullTextAnnotation", {}).get("text", "")
-
-    # Fallback to textAnnotations
-    if not full_text:
-        annotations = responses[0].get("textAnnotations", [])
-        if annotations:
-            full_text = annotations[0].get("description", "")
-
-    # Check for API error
-    if not full_text:
-        err = responses[0].get("error", {})
-        if err:
-            raise ValueError(f"Vision API error: {err.get('message', 'Unknown')}")
-
-    logger.info(f"Google Vision: {len(full_text)} chars extracted")
-    return full_text
+def extract_text_from_image(image_bytes: bytes) -> str:
+    """Google Vision first, Tesseract fallback — kept for backward compat."""
+    api_key = os.getenv("GOOGLE_VISION_API_KEY", "")
+    if api_key:
+        try:
+            text = extract_text_google_vision(image_bytes)
+            if text and len(text) > 20:
+                return text
+        except Exception as e:
+            logger.warning("Google Vision failed → Tesseract: %s", e)
+    if TESSERACT_AVAILABLE:
+        return extract_text_tesseract(image_bytes)
+    raise ValueError("No OCR engine available.")
 
 
 # ═══════════════════════════════════════════════════════════════
-#  TESSERACT OCR — FALLBACK
+#  INTERNAL HELPERS
 # ═══════════════════════════════════════════════════════════════
+
+def _detect_language_from_filename(filename: str) -> OCRLanguage:
+    """Infer language hint from filename convention."""
+    fname = filename.lower()
+    if any(k in fname for k in ("_mr", "_marathi", "-mr-")):
+        return OCRLanguage.MARATHI
+    if any(k in fname for k in ("_hi", "_hindi", "-hi-")):
+        return OCRLanguage.HINDI
+    return OCRLanguage.AUTO
+
 
 def _preprocess(image: "Image.Image") -> "Image.Image":
+    """Tesseract preprocessing — same as original."""
     img = image.convert('L')
     w, h = img.size
     if w < 1200:
@@ -122,149 +237,82 @@ def _preprocess(image: "Image.Image") -> "Image.Image":
     return img
 
 
-def extract_text_tesseract(image_bytes: bytes) -> str:
-    """Tesseract OCR fallback — English first approach."""
+def _tesseract_extract(image_bytes: bytes) -> Dict:
+    """
+    Run Tesseract and return raw dict — same shape as original
+    _parse_invoice_from_text() output.
+    """
     if not TESSERACT_AVAILABLE:
-        raise ValueError("Tesseract not available")
+        return {"ocr_confidence": "failed", "error": "Tesseract not available"}
 
-    img = Image.open(io.BytesIO(image_bytes))
-    proc = _preprocess(img)
+    try:
+        text = extract_text_tesseract(image_bytes)
+        return _parse_invoice_from_text(text, source="tesseract_fallback")
+    except Exception as exc:
+        logger.warning("Tesseract failed: %s", exc)
+        return {"ocr_confidence": "failed", "error": str(exc)}
 
-    text = pytesseract.image_to_string(proc, lang="eng", config='--psm 6 --oem 3')
-
-    # If English weak, try multilingual
-    if not GSTIN_RE.search(text) and not re.search(r'\d{3,}', text):
-        logger.info("English weak, trying eng+hin+mar")
-        text_multi = pytesseract.image_to_string(proc, lang="eng+hin+mar", config='--psm 6 --oem 3')
-        if len(text_multi) > len(text):
-            text = text_multi
-
-    logger.info(f"Tesseract: {len(text)} chars extracted")
-    return text
-
-
-# ═══════════════════════════════════════════════════════════════
-#  MAIN TEXT EXTRACTOR
-# ═══════════════════════════════════════════════════════════════
-
-def extract_text_from_image(image_bytes: bytes) -> str:
-    """
-    Google Vision first (95% accuracy), Tesseract fallback.
-    """
-    if GOOGLE_VISION_API_KEY:
-        try:
-            text = extract_text_google_vision(image_bytes)
-            if text and len(text) > 20:
-                return text
-        except Exception as e:
-            logger.warning(f"Google Vision failed → Tesseract fallback: {e}")
-
-    if TESSERACT_AVAILABLE:
-        return extract_text_tesseract(image_bytes)
-
-    raise ValueError("No OCR engine available. Set GOOGLE_VISION_API_KEY or install Tesseract.")
-
-
-# ═══════════════════════════════════════════════════════════════
-#  PARSE INVOICE FROM TEXT
-# ═══════════════════════════════════════════════════════════════
 
 def _parse_invoice_from_text(text: str, source: str = "image_ocr") -> Dict:
+    """Exact copy of original _parse_invoice_from_text() — unchanged."""
     invoice = {
-        "invoice_number": None,
-        "date": None,
-        "party_name": None,
-        "party_gstin": None,
-        "taxable_value": 0.0,
-        "igst": 0.0,
-        "cgst": 0.0,
-        "sgst": 0.0,
-        "total_amount": 0.0,
-        "hsn_code": None,
-        "ocr_text": text[:1500],
-        "ocr_confidence": "low",
-        "source": source,
+        "invoice_number": None, "date": None, "party_name": None,
+        "party_gstin": None, "taxable_value": 0.0, "igst": 0.0,
+        "cgst": 0.0, "sgst": 0.0, "total_amount": 0.0,
+        "hsn_code": None, "ocr_text": text[:1500],
+        "ocr_confidence": "low", "source": source,
     }
-
-    # GSTIN
     gstins = [g.upper() for g in GSTIN_RE.findall(text)]
     if gstins:
         invoice["party_gstin"] = gstins[0]
-        logger.info(f"GSTINs detected: {gstins}")
 
-    # Invoice Number
     m = INVOICE_RE.search(text)
     invoice["invoice_number"] = m.group(1).strip() if m else (
         INV_RE2.search(text).group(0).upper() if INV_RE2.search(text) else None
     )
-
-    # Date
     m = DATE_RE2.search(text) or DATE_RE.search(text)
     if m:
         invoice["date"] = m.group(1)
 
-    # Subtotal
     m = SUBTOTAL_RE.search(text)
     if m:
         invoice["taxable_value"] = _clean_amount(m.group(1))
 
-    # Total
     m = TOTAL_RE.search(text)
     if m:
         invoice["total_amount"] = _clean_amount(m.group(1))
 
     taxable = invoice["taxable_value"]
+    for regex, key in [(CGST_RE, "cgst"), (SGST_RE, "sgst"), (IGST_RE, "igst")]:
+        m = regex.search(text)
+        if m:
+            v = _clean_amount(m.group(1))
+            if taxable == 0 or v < taxable:
+                invoice[key] = v
 
-    # CGST
-    m = CGST_RE.search(text)
-    if m:
-        v = _clean_amount(m.group(1))
-        if taxable == 0 or v < taxable:
-            invoice["cgst"] = v
-
-    # SGST
-    m = SGST_RE.search(text)
-    if m:
-        v = _clean_amount(m.group(1))
-        if taxable == 0 or v < taxable:
-            invoice["sgst"] = v
-
-    # IGST
-    m = IGST_RE.search(text)
-    if m:
-        v = _clean_amount(m.group(1))
-        if taxable == 0 or v < taxable:
-            invoice["igst"] = v
-
-    # Calculate total if missing
     if invoice["total_amount"] == 0 and invoice["taxable_value"] > 0:
         invoice["total_amount"] = (
             invoice["taxable_value"] + invoice["igst"]
             + invoice["cgst"] + invoice["sgst"]
         )
 
-    # HSN Code
     lines = text.split('\n')
     for i, line in enumerate(lines):
         if HSN_RE.search(line):
-            area = '\n'.join(lines[max(0, i):i + 5])
+            area = '\n'.join(lines[max(0, i): i + 5])
             hsn8 = re.findall(r'\b(\d{8})\b', area)
             if hsn8:
-                invoice["hsn_code"] = hsn8[0]
-                break
+                invoice["hsn_code"] = hsn8[0]; break
             hsn4 = re.findall(r'\b(\d{4})\b', area)
             if hsn4:
-                invoice["hsn_code"] = hsn4[0]
-                break
+                invoice["hsn_code"] = hsn4[0]; break
 
-    # Party Name
     m = PARTY_RE.search(text)
     if m:
         name = m.group(1).strip().split('\n')[0].strip()
         if 3 < len(name) < 100:
             invoice["party_name"] = name
 
-    # Confidence score
     fields_ok = sum(1 for v in [
         invoice["invoice_number"],
         invoice["party_gstin"],
@@ -272,82 +320,58 @@ def _parse_invoice_from_text(text: str, source: str = "image_ocr") -> Dict:
         invoice["date"],
         (invoice["cgst"] > 0 or invoice["igst"] > 0 or invoice["sgst"] > 0),
     ] if v)
-
-    invoice["ocr_confidence"] = (
-        "high"   if fields_ok >= 4 else
-        "medium" if fields_ok >= 2 else
-        "low"
-    )
-
-    logger.info(
-        f"OCR parsed: inv={invoice['invoice_number']}, "
-        f"gstin={invoice['party_gstin']}, "
-        f"taxable={invoice['taxable_value']}, "
-        f"confidence={invoice['ocr_confidence']}"
-    )
+    invoice["ocr_confidence"] = "high" if fields_ok >= 4 else "medium" if fields_ok >= 2 else "low"
     return invoice
 
 
-# ═══════════════════════════════════════════════════════════════
-#  PUBLIC API
-# ═══════════════════════════════════════════════════════════════
-
-def extract_invoice_from_image(image_bytes: bytes, languages: str = "eng") -> Dict:
-    """Main function — extract invoice data from image bytes."""
-    text = extract_text_from_image(image_bytes)
-    return _parse_invoice_from_text(text, source="image_ocr")
-
-
-def scan_multiple_images(image_files: List[tuple], languages: str = "eng") -> List[Dict]:
-    """Scan multiple invoice images."""
-    results = []
-    for filename, file_bytes in image_files:
-        try:
-            invoice = extract_invoice_from_image(file_bytes, languages)
-            invoice["source_file"] = filename
-            results.append(invoice)
-        except Exception as e:
-            logger.warning(f"Failed to scan {filename}: {e}")
-            results.append({
-                "source_file": filename,
-                "error": str(e),
-                "ocr_confidence": "failed"
-            })
-    return results
-
-
-def scan_image_to_invoices(
-    image_bytes: bytes,
-    filename: str,
-    invoice_type: str = "purchase",
-    our_gstin: str = "",
-    period: str = "",
+def _raw_dict_to_invoices(
+    raw:          Dict,
+    inv_type:     "InvoiceType",
+    our_gstin:    str,
+    period:       str,
+    filename:     str,
 ) -> list:
-    """Scan image and return Invoice model objects."""
-    from app.models.invoice import Invoice, InvoiceType
-
-    inv_type = InvoiceType.SALE if invoice_type in ("sale", "sales") else InvoiceType.PURCHASE
-    raw = extract_invoice_from_image(image_bytes)
-
+    """Convert raw dict (Tesseract output) to Invoice objects."""
+    from app.models.invoice import Invoice
     if raw.get("ocr_confidence") == "failed":
         return []
-
     try:
         invoice = Invoice(
-            invoice_type=inv_type,
-            invoice_number=raw.get("invoice_number") or f"OCR-{filename[:10]}",
-            our_gstin=our_gstin,
-            period=period,
-            party_name=raw.get("party_name"),
-            party_gstin=raw.get("party_gstin"),
-            taxable_value=raw.get("taxable_value", 0),
-            igst=raw.get("igst", 0),
-            cgst=raw.get("cgst", 0),
-            sgst=raw.get("sgst", 0),
-            invoice_date=None,
-            hsn_code=raw.get("hsn_code"),
+            invoice_type  = inv_type,
+            invoice_number= raw.get("invoice_number") or f"OCR-{filename[:10]}",
+            our_gstin     = our_gstin,
+            period        = period,
+            party_name    = raw.get("party_name"),
+            party_gstin   = raw.get("party_gstin"),
+            taxable_value = raw.get("taxable_value", 0),
+            igst          = raw.get("igst", 0),
+            cgst          = raw.get("cgst", 0),
+            sgst          = raw.get("sgst", 0),
+            invoice_date  = None,
+            hsn_code      = raw.get("hsn_code"),
         )
         return [invoice]
-    except Exception as e:
-        logger.warning(f"Skip OCR invoice: {e}")
+    except Exception as exc:
+        logger.warning("Skip OCR invoice: %s", exc)
         return []
+
+
+def _ocr_result_to_raw_dict(result: OCRResult) -> Dict:
+    """Convert OCRResult → legacy raw dict shape (for extract_invoice_from_image)."""
+    ext = result.extracted
+    confidence_map = {"high": "high", "medium": "medium", "low": "low"}
+    return {
+        "invoice_number":  ext.invoice_number,
+        "date":            str(ext.invoice_date) if ext.invoice_date else None,
+        "party_name":      ext.party_name,
+        "party_gstin":     ext.party_gstin,
+        "taxable_value":   ext.taxable_value,
+        "igst":            ext.igst,
+        "cgst":            ext.cgst,
+        "sgst":            ext.sgst,
+        "total_amount":    ext.total_amount,
+        "hsn_code":        ext.hsn_code,
+        "ocr_text":        result.raw_text[:1500],
+        "ocr_confidence":  result.confidence_label.value,
+        "source":          f"ocr_module:{result.provider.value}",
+    }

@@ -17,29 +17,20 @@ export const setAuthHeader = (userId: string, email?: string, fullName?: string)
   if (fullName) api.defaults.headers.common["x-user-name"]  = fullName;
 };
 
-// ── Audit ─────────────────────────────────────────────────────────────────────
-// runAudit → turant task_id milta hai (Celery background mein kaam karta hai)
-export const runAudit = (form: FormData) =>
-  api.post("/api/audit", form);
+// ── Audit ─────────────────────────────────────────────────────
+export const runAudit      = (form: FormData)  => api.post("/api/audit", form);
+export const getAuditStatus = (taskId: string) => api.get(`/api/audit/status/${taskId}`);
+export const getAudit       = (auditId: string) => api.get(`/api/audit/${auditId}`);
 
-// getAuditStatus → poll karo jab tak status "completed" na ho
-// Response: { status: "processing"|"completed"|"failed", audit_id?: string, error?: string }
-export const getAuditStatus = (taskId: string) =>
-  api.get(`/api/audit/status/${taskId}`);
-
-// getAudit → final audit result fetch karo audit_id se
-export const getAudit = (auditId: string) =>
-  api.get(`/api/audit/${auditId}`);
-
-// ── Reports ───────────────────────────────────────────────────────────────────
+// ── Reports ───────────────────────────────────────────────────
 export const getReports  = ()                        => api.get("/api/reports");
 export const downloadPdf = (id: string, lang = "en") =>
   api.get(`/api/reports/${id}/pdf?lang=${lang}`, { responseType: "arraybuffer" });
 
-// ── Suppliers ─────────────────────────────────────────────────────────────────
+// ── Suppliers ─────────────────────────────────────────────────
 export const getSupplierTrustScores = () => api.get("/api/reports/suppliers");
 
-// ── Clients ───────────────────────────────────────────────────────────────────
+// ── Clients ───────────────────────────────────────────────────
 export const getClients = ()           => api.get("/api/clients");
 export const getClient  = (id: string) => api.get(`/api/clients/${id}`);
 
@@ -65,6 +56,15 @@ export const updateClient = (id: string, data: {
 
 export const deleteClient = (id: string) => api.delete(`/api/clients/${id}`);
 
-// ── Reconciliation ────────────────────────────────────────────────────────────
+// ── Reconciliation ────────────────────────────────────────────
 export const runReconciliation = (form: FormData) => api.post("/api/reconcile", form);
 export const getReconciliation = (id: string)     => api.get(`/api/reconcile/${id}`);
+
+// ── Notice Risk Queue (NEW) ───────────────────────────────────
+export const getNoticeQueue = (params?: {
+  min_prob?:   number;
+  limit?:      number;
+  risk_level?: "LOW" | "MEDIUM" | "HIGH" | "VERY_HIGH";
+}) => api.get("/api/notice-queue", { params });
+
+export const getNoticeQueueSummary = () => api.get("/api/notice-queue/summary");

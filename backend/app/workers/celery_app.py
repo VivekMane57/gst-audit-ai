@@ -1,9 +1,11 @@
 """
 workers/celery_app.py
 ---------------------
-Celery + Redis — Production v2.0
+Celery + Redis — Production v2.1
+Changes: Added Celery Beat schedule for monthly notice recheck
 """
 from celery import Celery
+from celery.schedules import crontab
 from app.config import get_settings
 
 settings = get_settings()
@@ -42,12 +44,26 @@ celery_app.conf.update(
     task_max_retries         = 2,
     task_default_retry_delay = 30,
 
-    # ── Startup retry fix (Celery 6.0 warning band) ───────────
+    # ── Startup retry fix ─────────────────────────────────────
     broker_connection_retry_on_startup = True,
+
+    # ── Beat Schedule — Monthly recheck ───────────────────────
+    # Runs on 1st of every month at 6:00 AM IST (00:30 UTC)
+    beat_schedule = {
+        "monthly-notice-recheck": {
+            "task":     "recheck.monthly_notice_risk",
+            "schedule": crontab(
+                hour         = 0,
+                minute       = 30,
+                day_of_month = "1",
+            ),
+            "options": {"expires": 3600},   # expire if not picked up in 1hr
+        },
+    },
 )
 
-# Auto-discover + explicit import — task registration ensure karta hai
+# Auto-discover + explicit imports
 celery_app.autodiscover_tasks(["app.workers"])
 
-# Explicit import — "-I flag" ki zaroorat nahi hogi ab
-import app.workers.audit_tasks  # noqa: E402, F401
+import app.workers.audit_tasks       # noqa: E402, F401
+import app.workers.recheck_scheduler  # noqa: E402, F401  ← Added
