@@ -3,6 +3,7 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { DM_Sans } from "next/font/google";
 import { cn } from "@/lib/utils";
+import AuditChatbot from "@/components/AuditChatbot";
 
 const dmSans = DM_Sans({
   subsets: ["latin"],
@@ -45,7 +46,11 @@ export default function RootLayout({
           <meta name="apple-mobile-web-app-capable" content="yes" />
           <meta name="mobile-web-app-capable" content="yes" />
         </head>
-        <body className="overscroll-none">{children}</body>
+        <body className="overscroll-none">
+          {children}
+          {/* Autonomous Multi-Tool LangGraph Agent */}
+          <AuditChatbot />
+        </body>
       </html>
     </ClerkProvider>
   );

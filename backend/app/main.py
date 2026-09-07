@@ -497,18 +497,16 @@
 
 
 
-
 """
 main.py — FastAPI entry point  (Production v2.0)
 -------------------------------------------------
-Teri existing clean architecture SAME rakhi hai.
-Sirf 3 production middlewares add kiye hain:
-  1. RequestLoggingMiddleware  — JSON structured logs
-  2. FileSizeLimitMiddleware   — 20MB hard cap (header level, zero body cost)
-  3. TimeoutMiddleware         — 30s hard timeout
+Clean architecture with production middlewares:
+  1. RequestLoggingMiddleware   — JSON structured logs
+  2. FileSizeLimitMiddleware    — 20MB hard cap
+  3. TimeoutMiddleware          — 30s hard timeout
 + Supabase warmup on startup
 + Admin Rule Engine routers registered
-+ Landing page Early Access Enquiry router registered
++ Collision resolved: hsn_router and hsn_classify_router
 """
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -522,19 +520,27 @@ import uuid
 
 from app.config import get_settings
 from app.routers import health
-from app.routers import audit          as audit_router
-from app.routers import clients        as clients_router
-from app.routers import reports        as reports_router
-from app.routers import hsn            as hsn_router
-from app.routers import reconciliation as recon_router
-from app.routers import notice_queue   as notice_queue_router
-from app.routers import enquiry        as enquiry_router
+from app.routers import audit           as audit_router
+from app.routers import clients         as clients_router
+from app.routers import reports         as reports_router
+from app.routers import hsn             as hsn_router
+from app.routers import reconciliation  as recon_router
+from app.routers import notice_queue    as notice_queue_router
+from app.routers import enquiry         as enquiry_router
 
 # ── Admin Routers (Rule Engine) ────────────────────────────────
 from app.routers.admin import rules_router
 from app.routers.admin import laws_router
 from app.routers.admin import thresholds_router
 from app.routers.admin import fix_steps_router
+from app.routers import suppliers        as suppliers_router
+from app.routers import compliance       as compliance_router
+from app.routers import hsn_classify    as hsn_classify_router  # ✅ Distinct alias
+from app.routers import mlops           as mlops_router
+from app.routers import agent           as agent_router
+from app.routers import anomalies       as anomalies_router
+from app.routers import forecast        as forecast_router
+from app.routers import observability   as observability_router
 
 try:
     import sentry_sdk
@@ -563,11 +569,6 @@ logger = logging.getLogger(__name__)
 # MIDDLEWARE 1 — Request Logging (JSON structured)
 # ══════════════════════════════════════════════════════════════
 class RequestLoggingMiddleware:
-    """
-    Har request ka ek JSON log line — method, path, status,
-    duration_ms, user_id, real_ip sab included.
-    Grep karo: grep '"status": 500' audit_access.log
-    """
     def __init__(self, app):
         self.app = app
 
@@ -608,11 +609,6 @@ class RequestLoggingMiddleware:
 # MIDDLEWARE 2 — File Size Limit (20MB)
 # ══════════════════════════════════════════════════════════════
 class FileSizeLimitMiddleware:
-    """
-    Content-Length header check karo — body read karne se PEHLE reject.
-    Zero body cost — RAM waste nahi.
-    20MB = Node.js diskStorage limit ke saath match karta hai.
-    """
     MAX_BYTES = 20 * 1024 * 1024  # 20MB
 
     def __init__(self, app):
@@ -636,11 +632,6 @@ class FileSizeLimitMiddleware:
 # MIDDLEWARE 3 — Request Timeout (30s)
 # ══════════════════════════════════════════════════════════════
 class TimeoutMiddleware:
-    """
-    30s se zyada koi request nahi chalegi.
-    Audit routes Celery task_id turant return karte hain —
-    isliye 30s bahut hai.
-    """
     TIMEOUT = float(30)
 
     def __init__(self, app):
@@ -723,11 +714,9 @@ app.add_middleware(
 )
 
 # ── Production middlewares ─────────────────────────────────────
-# add_middleware stack: LIFO — last added = outermost (runs first)
-# Order: Timeout (outermost) → FileSizeLimit → RequestLogging → handler
-app.add_middleware(RequestLoggingMiddleware)  # added first = innermost
-app.add_middleware(FileSizeLimitMiddleware)   # added second
-app.add_middleware(TimeoutMiddleware)         # added last = outermost ✅
+app.add_middleware(RequestLoggingMiddleware)
+app.add_middleware(FileSizeLimitMiddleware)
+app.add_middleware(TimeoutMiddleware)
 
 # ── Global error handler ──────────────────────────────────────
 @app.exception_handler(Exception)
@@ -747,6 +736,14 @@ app.include_router(hsn_router.router,           prefix="")
 app.include_router(recon_router.router)
 app.include_router(notice_queue_router.router)
 app.include_router(enquiry_router.router)
+app.include_router(suppliers_router.router)
+app.include_router(compliance_router.router)
+app.include_router(hsn_classify_router.router)  # ✅ Now registers hsn_classify separately
+app.include_router(mlops_router.router)
+app.include_router(agent_router.router)
+app.include_router(anomalies_router.router)
+app.include_router(forecast_router.router)
+app.include_router(observability_router.router)
 
 # ── Admin Routers (Rule Engine) ────────────────────────────────
 app.include_router(rules_router.router,         prefix="/admin")
